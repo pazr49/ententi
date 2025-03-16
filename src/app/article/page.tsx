@@ -3,19 +3,25 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ArticleReader from '@/components/ArticleReader';
+import TranslationSettings from '@/components/TranslationSettings';
 import { ReadableArticle } from '@/utils/readability';
 import { useSavedArticles } from '@/context/SavedArticlesContext';
+import { useAuth } from '@/context/AuthContext';
+import { callEdgeFunction } from '@/utils/supabase';
 import Link from 'next/link';
 
 export default function ArticlePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const url = searchParams.get('url');
+  const { user } = useAuth(); // Get the current user
   
   const [article, setArticle] = useState<ReadableArticle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedArticle, setTranslatedArticle] = useState<ReadableArticle | null>(null);
   const { removeArticle, savedArticleGuids, savedArticles, refreshArticles, connectionError } = useSavedArticles();
 
   // Create a unique ID for the article based on the URL
@@ -73,6 +79,42 @@ export default function ArticlePage() {
     }
   };
 
+  // Handle translation and reading level adaptation
+  const handleTranslate = async (language: string, readingAge: string) => {
+    if (!article) return;
+    
+    // Check if user is authenticated
+    if (!user) {
+      setError('You must be logged in to use the translation feature');
+      return;
+    }
+    
+    try {
+      setIsTranslating(true);
+      setError(null);
+      
+      // Call the Supabase Edge Function for translation
+      const translatedData = await callEdgeFunction<
+        { articleContent: ReadableArticle; targetLanguage: string; readingAge: string },
+        ReadableArticle
+      >(
+        'translate-article',
+        {
+          articleContent: article,
+          targetLanguage: language,
+          readingAge: readingAge,
+        }
+      );
+      
+      setTranslatedArticle(translatedData);
+    } catch (error) {
+      console.error('Error translating article:', error);
+      setError(error instanceof Error ? error.message : 'Failed to translate article. Please try again.');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   useEffect(() => {
     async function fetchArticle() {
       if (!url) {
@@ -114,23 +156,23 @@ export default function ArticlePage() {
 
   if (!isSaved && url) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        <main className="py-8">
-          <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md">
-            <h1 className="text-2xl font-bold mb-4">Redirecting to original article...</h1>
-            <p className="mb-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <main className="py-12 px-4">
+          <div className="max-w-3xl mx-auto p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+            <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Redirecting to original article...</h1>
+            <p className="mb-6 text-gray-600 dark:text-gray-300">
               This article is not saved. You can only read articles in reader view after saving them.
             </p>
-            <div className="flex space-x-4">
+            <div className="flex flex-wrap gap-4">
               <a 
                 href={url} 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
               >
                 Go to Original Article
               </a>
               <Link 
                 href="/" 
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                className="px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
               >
                 Back to Home
               </Link>
@@ -142,21 +184,84 @@ export default function ArticlePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <main className="py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <header className="sticky top-0 z-20 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <Link 
+              href="/saved" 
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Back to saved articles"
+            >
+              <svg 
+                className="w-5 h-5 text-gray-600 dark:text-gray-300" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18" 
+                />
+              </svg>
+            </Link>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              <p className="font-medium">Reader View</p>
+              {savedArticle && (
+                <a 
+                  href={savedArticle.link} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
+                >
+                  View Original
+                </a>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleRemoveArticle}
+            disabled={isRemoving}
+            className={`px-4 py-1.5 rounded-lg text-white text-sm bg-red-500 hover:bg-red-600 transition-colors focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+              isRemoving ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            {isRemoving ? 'Unsaving...' : 'Unsave'}
+          </button>
+        </div>
+      </header>
+
+      <main className="py-6">
         {error ? (
-          <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md">
-            <p className="text-center text-red-500 font-bold">Error</p>
-            <p className="text-center text-red-500">{error}</p>
-            {!url && (
-              <p className="text-center mt-4">
-                Please provide a URL to read an article
-              </p>
-            )}
-            <div className="flex justify-center mt-6">
+          <div className="max-w-3xl mx-auto p-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <div className="flex flex-col items-center">
+              <svg 
+                className="w-16 h-16 text-red-500 mb-4" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                />
+              </svg>
+              <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Error Loading Article</h2>
+              <p className="text-center text-red-500 mb-6">{error}</p>
+              {!url && (
+                <p className="text-center text-gray-600 dark:text-gray-300 mb-6">
+                  Please provide a URL to read an article
+                </p>
+              )}
               <Link 
                 href="/saved" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
               >
                 Back to Saved Articles
               </Link>
@@ -164,40 +269,36 @@ export default function ArticlePage() {
           </div>
         ) : (
           <>
-            <div className="max-w-3xl mx-auto mb-4 px-4 flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                <p>Reader view of saved article</p>
-                {savedArticle && (
-                  <a 
-                    href={savedArticle.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    View Original
-                  </a>
-                )}
-              </div>
-              <button
-                onClick={handleRemoveArticle}
-                disabled={isRemoving}
-                className={`px-4 py-2 rounded-md text-white bg-red-500 hover:bg-red-600 transition-colors ${
-                  isRemoving ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {isRemoving ? 'Unsaving...' : 'Unsave Article'}
-              </button>
-            </div>
             <div className="max-w-3xl mx-auto mb-4 px-4">
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                <p className="text-sm text-yellow-700">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 dark:border-amber-500 p-4 mb-4 rounded-r-md">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
                   <strong>Legal Notice:</strong> This reader view is only available for articles you&apos;ve saved. 
                   The content is fetched on-demand and not stored permanently. 
                   This approach respects copyright by only storing the URL until you request to read it.
                 </p>
               </div>
+              
+              {/* Only show the translation component if the feature flag is enabled AND user is authenticated */}
+              {process.env.NEXT_PUBLIC_ENABLE_TRANSLATION === 'true' && user && (
+                <TranslationSettings 
+                  onTranslate={handleTranslate}
+                  isTranslating={isTranslating}
+                />
+              )}
+              
+              {/* Show login prompt if translation is enabled but user is not authenticated */}
+              {process.env.NEXT_PUBLIC_ENABLE_TRANSLATION === 'true' && !user && (
+                <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-400 dark:border-indigo-500 p-4 rounded-r-md">
+                  <p className="text-sm text-indigo-800 dark:text-indigo-300">
+                    <strong>Translation Feature:</strong> Log in to translate this article to different languages and adapt it to your preferred reading level.
+                  </p>
+                </div>
+              )}
             </div>
-            <ArticleReader article={article as ReadableArticle} isLoading={isLoading} />
+            <ArticleReader 
+              article={translatedArticle || article as ReadableArticle} 
+              isLoading={isLoading || isTranslating} 
+            />
           </>
         )}
       </main>

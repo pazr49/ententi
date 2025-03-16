@@ -262,16 +262,16 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
 
   if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md">
+      <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-sm">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-6"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-8"></div>
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4 mb-6"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-1/4 mb-8"></div>
           <div className="space-y-4">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-5/6"></div>
           </div>
         </div>
       </div>
@@ -280,7 +280,7 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
 
   if (!article) {
     return (
-      <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md">
+      <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-lg shadow-sm">
         <p className="text-center text-gray-500 dark:text-gray-400">
           Article could not be loaded
         </p>
@@ -307,16 +307,16 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
   }
 
   return (
-    <div className={`max-w-3xl mx-auto ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-md transition-colors duration-200`}>
-      <div className="sticky top-0 z-10 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-800 bg-inherit">
-        <div className="flex space-x-2">
+    <div className={`max-w-3xl mx-auto ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200`}>
+      <div className="sticky top-0 z-10 flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-800 bg-inherit backdrop-blur-sm bg-white/90 dark:bg-gray-900/90">
+        <div className="flex space-x-3">
           <button
             onClick={toggleFontSize}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Change font size"
           >
             <svg 
-              className="w-5 h-5" 
+              className="w-5 h-5 text-gray-600 dark:text-gray-300" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24" 
@@ -332,12 +332,12 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
           </button>
           <button
             onClick={toggleDarkMode}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Toggle dark mode"
           >
             {isDarkMode ? (
               <svg 
-                className="w-5 h-5" 
+                className="w-5 h-5 text-gray-300" 
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24" 
@@ -352,7 +352,7 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
               </svg>
             ) : (
               <svg 
-                className="w-5 h-5" 
+                className="w-5 h-5 text-gray-600" 
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24" 
@@ -370,17 +370,17 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
         </div>
       </div>
 
-      <div className="p-6">
-        <h1 className="text-2xl md:text-3xl font-bold mb-4">{article.title}</h1>
+      <div className="p-6 md:p-8">
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">{article.title}</h1>
         
-        <div className="border-b border-gray-200 dark:border-gray-800 pb-4 mb-6">
+        <div className="border-b border-gray-100 dark:border-gray-800 pb-4 mb-6">
           {(authorName || article.siteName || publishDate) && (
-            <div className="flex flex-col space-y-2">
+            <div className="flex flex-col space-y-3">
               {authorName && (
                 <div className="flex items-center">
-                  <div className="w-8 h-8 bg-gray-300 dark:bg-gray-700 rounded-full flex items-center justify-center mr-3">
+                  <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center mr-3 text-indigo-600 dark:text-indigo-300">
                     <svg 
-                      className="w-4 h-4 text-gray-600 dark:text-gray-400" 
+                      className="w-4 h-4" 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24" 
@@ -400,11 +400,11 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
                 </div>
               )}
               
-              <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex flex-wrap items-center text-sm text-gray-600 dark:text-gray-400">
                 {article.siteName && (
-                  <div className="flex items-center mr-4">
+                  <div className="flex items-center mr-4 mb-2">
                     <svg 
-                      className="w-4 h-4 mr-1" 
+                      className="w-4 h-4 mr-1 text-gray-500 dark:text-gray-400" 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24" 
@@ -422,9 +422,9 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
                 )}
                 
                 {publishDate && (
-                  <div className="flex items-center">
+                  <div className="flex items-center mb-2">
                     <svg 
-                      className="w-4 h-4 mr-1" 
+                      className="w-4 h-4 mr-1 text-gray-500 dark:text-gray-400" 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24" 
@@ -467,54 +467,70 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
             max-width: 100%;
             height: auto;
             margin: 0 auto;
-            border-radius: 0.375rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
           }
           
           .article-content p {
-            margin-bottom: 1rem;
-            line-height: 1.7;
+            margin-bottom: 1.25rem;
+            line-height: 1.8;
+            font-size: ${fontSize === 'text-base' ? '1rem' : fontSize === 'text-lg' ? '1.125rem' : '1.25rem'};
           }
           
           .article-content h2 {
             font-size: 1.5rem;
-            font-weight: 600;
-            margin-top: 2rem;
+            font-weight: 700;
+            margin-top: 2.5rem;
             margin-bottom: 1rem;
+            color: ${isDarkMode ? '#f3f4f6' : '#111827'};
+            letter-spacing: -0.025em;
           }
           
           .article-content h3 {
             font-size: 1.25rem;
             font-weight: 600;
-            margin-top: 1.5rem;
+            margin-top: 2rem;
             margin-bottom: 0.75rem;
+            color: ${isDarkMode ? '#e5e7eb' : '#1f2937'};
+            letter-spacing: -0.025em;
           }
           
           .article-content a {
             color: ${isDarkMode ? '#93c5fd' : '#3b82f6'};
-            text-decoration: underline;
+            text-decoration: none;
+            border-bottom: 1px solid ${isDarkMode ? 'rgba(147, 197, 253, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
+            transition: border-color 0.2s ease;
+          }
+          
+          .article-content a:hover {
+            border-bottom-color: ${isDarkMode ? 'rgba(147, 197, 253, 0.8)' : 'rgba(59, 130, 246, 0.8)'};
           }
           
           .article-content blockquote {
-            border-left: 4px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'};
-            padding-left: 1rem;
+            border-left: 3px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'};
+            padding-left: 1.25rem;
             font-style: italic;
             margin: 1.5rem 0;
+            color: ${isDarkMode ? '#9ca3af' : '#4b5563'};
           }
           
           .article-content ul, .article-content ol {
             padding-left: 1.5rem;
-            margin: 1rem 0;
+            margin: 1.25rem 0;
           }
           
           .article-content li {
             margin-bottom: 0.5rem;
+            line-height: 1.7;
           }
           
           .article-content .image-wrapper {
             position: relative;
             display: block;
             width: 100%;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border-radius: 0.5rem;
           }
           
           .article-content .image-attribution {
@@ -523,10 +539,11 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
             right: 8px;
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
-            padding: 2px 6px;
-            border-radius: 3px;
+            padding: 3px 8px;
+            border-radius: 4px;
             font-size: 0.75rem;
             z-index: 10;
+            backdrop-filter: blur(4px);
           }
         `}</style>
       </div>

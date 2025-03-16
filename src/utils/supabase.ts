@@ -67,4 +67,80 @@ export type Article = {
 };
 
 // For now, we'll use a default user ID since we're assuming a single user
-export const DEFAULT_USER_ID = 'default-user'; 
+export const DEFAULT_USER_ID = 'default-user';
+
+// Supabase utility functions
+
+/**
+ * Get the Supabase URL from environment variables
+ */
+export const getSupabaseUrl = (): string => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is not set');
+  }
+  return supabaseUrl;
+};
+
+/**
+ * Get the URL for a Supabase Edge Function
+ * @param functionName The name of the Edge Function
+ * @returns The full URL to the Edge Function
+ */
+export const getEdgeFunctionUrl = (functionName: string): string => {
+  const supabaseUrl = getSupabaseUrl();
+  // Convert from https://your-project.supabase.co to https://your-project.supabase.co/functions/v1/function-name
+  return `${supabaseUrl}/functions/v1/${functionName}`;
+};
+
+/**
+ * Call a Supabase Edge Function
+ * @param functionName The name of the Edge Function
+ * @param payload The payload to send to the function
+ * @param token Optional authentication token
+ * @returns The response from the Edge Function
+ */
+export const callEdgeFunction = async <T, R>(
+  functionName: string, 
+  payload: T, 
+  token?: string
+): Promise<R> => {
+  const url = getEdgeFunctionUrl(functionName);
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  
+  // If a token is provided, use it
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } 
+  // Otherwise, try to get the current session token
+  else {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (error) {
+      console.warn('Failed to get session token for Edge Function call:', error);
+    }
+  }
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      `Edge function call failed: ${response.status}${
+        errorData ? ` - ${JSON.stringify(errorData)}` : ''
+      }`
+    );
+  }
+  
+  return response.json();
+}; 
