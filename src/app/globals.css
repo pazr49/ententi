@@ -22,5 +22,326 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Centralized Component Styles */
+
+/* Navbar Styles */
+.navbar {
+  @apply bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 
+         border-b border-indigo-100 dark:border-gray-700 
+         transition-all duration-300 fixed top-0 left-0 right-0 z-50;
+}
+
+.navbar-scrolled {
+  @apply shadow-xl;
+}
+
+.navbar-default {
+  @apply shadow-lg;
+}
+
+.navbar-container {
+  @apply container mx-auto px-4;
+}
+
+.navbar-content {
+  @apply flex justify-between items-center h-16;
+}
+
+.navbar-logo-container {
+  @apply flex items-center;
+}
+
+.navbar-logo-link {
+  @apply flex items-center;
+}
+
+.navbar-logo-link:hover .navbar-logo-icon {
+  @apply scale-110;
+}
+
+.navbar-logo-icon {
+  @apply h-8 w-8 text-indigo-600 dark:text-indigo-400 transition-transform duration-300;
+}
+
+.navbar-logo-text {
+  @apply ml-2 text-xl font-bold text-indigo-800 dark:text-white tracking-tight transition-colors duration-300;
+}
+
+.navbar-menu {
+  @apply hidden md:block;
+}
+
+.navbar-menu-items {
+  @apply flex items-center space-x-6;
+}
+
+.navbar-link {
+  @apply text-gray-700 dark:text-gray-200 hover:text-indigo-700 dark:hover:text-white 
+         px-3 py-2 rounded-md text-base font-semibold transition-colors duration-200 relative;
+}
+
+.navbar-link:hover .navbar-link-underline {
+  @apply w-full;
+}
+
+.navbar-link-underline {
+  @apply absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-500 transition-all duration-300;
+}
+
+.navbar-button {
+  @apply text-gray-700 dark:text-gray-200 hover:text-indigo-700 dark:hover:text-white 
+         px-4 py-2 rounded-md text-base font-semibold transition-colors duration-200;
+}
+
+.navbar-button-primary {
+  @apply bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md 
+         text-base font-semibold transition-colors duration-200 shadow-sm hover:shadow;
+}
+
+.navbar-dropdown {
+  @apply relative;
+}
+
+.navbar-dropdown-button {
+  @apply flex items-center text-gray-700 dark:text-gray-200 hover:text-indigo-700 dark:hover:text-white 
+         px-3 py-2 rounded-md text-base font-semibold focus:outline-none transition-colors duration-200;
+}
+
+.navbar-dropdown-content {
+  @apply absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-10 
+         border border-gray-100 dark:border-gray-700 transform origin-top-right transition-all duration-200;
+}
+
+.navbar-dropdown-item {
+  @apply block px-4 py-2 text-base text-gray-700 dark:text-gray-200 
+         hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors duration-150 font-medium;
+}
+
+.navbar-mobile-button {
+  @apply text-gray-700 dark:text-gray-200 hover:text-indigo-700 dark:hover:text-white 
+         focus:outline-none transition-colors duration-200;
+}
+
+.navbar-mobile-menu {
+  @apply md:hidden border-t border-gray-200 dark:border-gray-700;
+}
+
+.navbar-mobile-menu-container {
+  @apply px-2 pt-2 pb-3 space-y-1 sm:px-3;
+}
+
+.navbar-mobile-link {
+  @apply block text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-gray-700 
+         hover:text-indigo-700 dark:hover:text-white px-3 py-2 rounded-md text-lg font-semibold transition-colors duration-150;
+}
+
+/* Hero Section Styles */
+.hero-section {
+  @apply bg-gradient-to-br from-indigo-50 via-blue-50 to-indigo-100 
+         dark:from-gray-900 dark:via-gray-800 dark:to-gray-900
+         py-16 md:py-24 border-b border-indigo-100 dark:border-gray-800;
+}
+
+.hero-container {
+  @apply container mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.hero-content {
+  @apply max-w-4xl mx-auto text-center;
+}
+
+.hero-title {
+  @apply text-4xl md:text-5xl lg:text-6xl font-bold text-indigo-900 dark:text-white 
+         tracking-tight mb-4 leading-tight;
+}
+
+.hero-subtitle {
+  @apply text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto;
+}
+
+.hero-cta-container {
+  @apply flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4;
+}
+
+.hero-primary-button {
+  @apply bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md 
+         text-base font-semibold transition-colors duration-200 shadow-md hover:shadow-lg;
+}
+
+.hero-secondary-button {
+  @apply bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 
+         px-6 py-3 rounded-md text-base font-semibold transition-colors duration-200 
+         shadow-sm hover:shadow dark:bg-gray-800 dark:hover:bg-gray-700 
+         dark:text-indigo-400 dark:border-gray-700;
+}
+
+.hero-decoration {
+  @apply absolute -z-10 opacity-10 dark:opacity-5;
+}
+
+/* Article List Styles */
+.article-list-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12;
+}
+
+.article-list-title {
+  @apply text-3xl font-bold mb-8 text-indigo-900 dark:text-white tracking-tight;
+}
+
+.article-list-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8;
+}
+
+.article-list-error {
+  @apply mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 
+         text-red-700 dark:text-red-400 rounded-md;
+}
+
+.article-list-error-title {
+  @apply font-bold mb-1;
+}
+
+.article-list-empty {
+  @apply flex flex-col items-center justify-center py-16;
+}
+
+.article-list-empty-icon {
+  @apply w-16 h-16 text-indigo-400 dark:text-indigo-600 mb-4;
+}
+
+.article-list-empty-title {
+  @apply text-xl font-medium text-indigo-800 dark:text-indigo-400;
+}
+
+.article-list-empty-text {
+  @apply text-gray-600 dark:text-gray-400 mt-2 text-center;
+}
+
+/* Article Card Styles */
+.article-card-container {
+  @apply h-full;
+}
+
+.article-card {
+  @apply bg-white dark:bg-gray-800 rounded-xl overflow-hidden transition-all duration-300
+         border border-gray-100 dark:border-gray-700 hover:shadow-lg hover:border-indigo-100 
+         dark:hover:border-indigo-900 cursor-pointer h-full flex flex-col;
+}
+
+.article-card:hover .article-card-title {
+  @apply text-indigo-700 dark:text-indigo-400;
+}
+
+.article-card-image-container {
+  @apply relative h-48 w-full overflow-hidden flex-shrink-0;
+}
+
+.article-card-image {
+  @apply object-cover transition-transform duration-500 hover:scale-105;
+}
+
+.article-card-reader-badge {
+  @apply absolute top-3 right-3 bg-indigo-600 text-white text-xs px-2 py-1 
+         rounded-md shadow-md z-10 font-medium;
+}
+
+.article-card-content {
+  @apply p-5 flex-grow flex flex-col;
+}
+
+.article-card-meta {
+  @apply flex justify-between items-start mb-3 flex-shrink-0;
+}
+
+.article-card-source {
+  @apply flex items-center;
+}
+
+.article-card-source-text {
+  @apply text-xs text-gray-500 dark:text-gray-400 font-medium;
+}
+
+.article-card-dot {
+  @apply mx-2 text-gray-300 dark:text-gray-600;
+}
+
+.article-card-date {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.article-card-save-button {
+  @apply p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0;
+}
+
+.article-card-save-button-disabled {
+  @apply opacity-50;
+}
+
+.article-card-save-icon {
+  @apply w-5 h-5;
+}
+
+.article-card-save-icon-saved {
+  @apply text-indigo-600;
+}
+
+.article-card-save-icon-unsaved {
+  @apply text-gray-400 hover:text-indigo-600;
+}
+
+.article-card-title {
+  @apply font-bold text-lg mb-2 line-clamp-2 transition-colors duration-200
+         text-gray-900 dark:text-white h-14 flex-shrink-0;
+}
+
+.article-card-snippet {
+  @apply text-gray-600 dark:text-gray-300 text-sm line-clamp-3 mb-3 flex-grow;
+}
+
+.article-card-read-link {
+  @apply flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 
+         dark:hover:text-indigo-300 text-sm font-medium transition-colors duration-200 mt-auto flex-shrink-0;
+}
+
+.article-card-read-icon {
+  @apply w-4 h-4 ml-1;
+}
+
+.article-card-login-prompt {
+  @apply absolute right-0 top-8 w-64 bg-white dark:bg-gray-700 rounded-md shadow-lg 
+         p-3 z-10 text-sm border border-gray-100 dark:border-gray-600;
+}
+
+.article-card-login-prompt-arrow {
+  @apply absolute -top-2 right-2 w-4 h-4 bg-white dark:bg-gray-700 transform rotate-45
+         border-l border-t border-gray-100 dark:border-gray-600;
+}
+
+.article-card-login-text {
+  @apply mb-2 text-gray-800 dark:text-gray-200;
+}
+
+.article-card-login-buttons {
+  @apply flex space-x-2;
+}
+
+.article-card-login-button {
+  @apply px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs;
+}
+
+.article-card-signup-button {
+  @apply px-3 py-1 bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-white 
+         rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 text-xs;
+}
+
+/* Loading Animation */
+.loading-pulse {
+  @apply animate-pulse flex space-x-2;
+}
+
+.loading-pulse-bar {
+  @apply h-2 w-16 bg-gray-300 dark:bg-gray-600 rounded;
 }
