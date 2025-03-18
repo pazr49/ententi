@@ -345,3 +345,20 @@ body {
 .loading-pulse-bar {
   @apply h-2 w-16 bg-gray-300 dark:bg-gray-600 rounded;
 }
+
+/* Feed row styles */
+.feeds-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+}
+
+.article-feeds-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+}
+
+.article-feeds-container .article-list-title {
+  @apply text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8 text-center;
+}
+
+.feed-container {
+  @apply max-w-7xl mx-auto;
+}

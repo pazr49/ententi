@@ -1,11 +1,40 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl') || '/';
+  const [pendingArticleUrl, setPendingArticleUrl] = useState<string | null>(null);
+  
+  // Check for pending article URL in session storage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUrl = sessionStorage.getItem('pendingArticleUrl');
+      if (storedUrl) {
+        setPendingArticleUrl(storedUrl);
+      }
+    }
+  }, []);
+  
+  // Redirect authenticated user to return URL or handle pending article
+  useEffect(() => {
+    if (user) {
+      if (pendingArticleUrl) {
+        // Clear pending URL from session storage
+        sessionStorage.removeItem('pendingArticleUrl');
+        // Navigate to article reader with the URL
+        router.push(`/article?url=${encodeURIComponent(pendingArticleUrl)}`);
+      } else {
+        router.push(returnUrl);
+      }
+    }
+  }, [user, returnUrl, pendingArticleUrl, router]);
   
   const handleLogin = async (email: string, password?: string) => {
     if (!password) {
@@ -13,6 +42,12 @@ export default function LoginPage() {
     }
     
     await signIn(email, password);
+    // Redirect will happen in useEffect
+  };
+  
+  const handleGoogleSignIn = async () => {
+    await signInWithGoogle();
+    // Redirect will happen after Google auth completes and user state updates
   };
   
   return (
@@ -21,11 +56,16 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-indigo-900 dark:text-white mb-2">Welcome Back</h2>
           <p className="text-gray-600 dark:text-gray-400">Sign in to continue your language learning journey</p>
+          {pendingArticleUrl && (
+            <p className="mt-2 text-indigo-600 dark:text-indigo-400">
+              Sign in to save the article and start reading
+            </p>
+          )}
         </div>
         <AuthForm 
           type="login" 
           onSubmit={handleLogin} 
-          onGoogleSignIn={signInWithGoogle}
+          onGoogleSignIn={handleGoogleSignIn}
         />
       </div>
     </div>

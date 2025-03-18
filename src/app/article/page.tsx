@@ -24,7 +24,7 @@ export default function ArticlePage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedArticle, setTranslatedArticle] = useState<ReadableArticle | null>(null);
   const [isClient, setIsClient] = useState(false);
-  const { removeArticle, savedArticleGuids, savedArticles, refreshArticles, connectionError } = useSavedArticles();
+  const { saveArticle, removeArticle, savedArticleGuids, savedArticles, refreshArticles, connectionError } = useSavedArticles();
 
   const initialSavedArticles = typeof window !== 'undefined' ? getSavedArticlesFromLocalStorage() : [];
   const isSavedFromLocal = url ? (initialSavedArticles.some(article => article.link === url) || initialSavedArticles.some(article => article.guid === url || article.guid === encodeURIComponent(url))) : false;
@@ -212,6 +212,111 @@ export default function ArticlePage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Check for pending article URL in session storage after login
+  useEffect(() => {
+    if (isClient && user) {
+      const pendingArticleUrl = sessionStorage.getItem('pendingArticleUrl');
+      if (pendingArticleUrl) {
+        // Handle pending article
+        const handlePendingArticle = async () => {
+          try {
+            setIsLoading(true);
+            
+            // Fetch article content to get title, etc.
+            const response = await fetch(`/api/article?url=${encodeURIComponent(pendingArticleUrl)}`);
+            
+            if (!response.ok) {
+              throw new Error(`Failed to fetch article: ${response.status}`);
+            }
+            
+            const articleData = await response.json();
+            
+            // Extract any images from article content using DOM parsing
+            let imageUrl = undefined;
+            try {
+              // Create a temporary DOM to extract the first image
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = articleData.content;
+              const firstImage = tempDiv.querySelector('img');
+              if (firstImage && firstImage.src) {
+                imageUrl = firstImage.src;
+              }
+            } catch (imgError) {
+              console.error('Error extracting image:', imgError);
+            }
+
+            // Create a complete article object with actual data
+            const pendingArticle = {
+              guid: encodeURIComponent(pendingArticleUrl),
+              title: articleData.title || 'Untitled Article',
+              link: pendingArticleUrl,
+              pubDate: articleData.publishedTime || new Date().toISOString(),
+              contentSnippet: articleData.excerpt || articleData.textContent?.slice(0, 150) || '',
+              content: articleData.content || '',
+              imageUrl: imageUrl,
+              isoDate: articleData.publishedTime || new Date().toISOString(),
+            };
+            
+            // Save the article with complete data
+            await saveArticle(pendingArticle);
+            
+            // Store article data in session storage
+            try {
+              sessionStorage.setItem('currentArticle', JSON.stringify(articleData));
+              sessionStorage.setItem('currentArticleUrl', pendingArticleUrl);
+            } catch (err) {
+              console.error('Error storing article in sessionStorage:', err);
+            }
+            
+            // Clear the pending URL
+            sessionStorage.removeItem('pendingArticleUrl');
+            
+            // If we're not already on the correct page, navigate to it
+            if (url !== pendingArticleUrl) {
+              router.push(`/article?url=${encodeURIComponent(pendingArticleUrl)}`);
+            } else {
+              // Force refresh article list to include the newly saved article
+              await refreshArticles();
+            }
+          } catch (err) {
+            console.error('Error processing pending article:', err);
+            
+            // Fallback to basic article data if API fails
+            try {
+              const basicArticle = {
+                guid: encodeURIComponent(pendingArticleUrl),
+                title: 'Article from URL',
+                link: pendingArticleUrl,
+                pubDate: new Date().toISOString(),
+                contentSnippet: 'Content not available. Please open the article to view.',
+                isoDate: new Date().toISOString(),
+              };
+              
+              // Save the basic article
+              await saveArticle(basicArticle);
+              
+              // Clear the pending URL
+              sessionStorage.removeItem('pendingArticleUrl');
+              
+              // Navigate to article reader
+              if (url !== pendingArticleUrl) {
+                router.push(`/article?url=${encodeURIComponent(pendingArticleUrl)}`);
+              } else {
+                await refreshArticles();
+              }
+            } catch (saveError) {
+              setError(saveError instanceof Error ? saveError.message : 'Failed to save article. Please try again.');
+            }
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        
+        handlePendingArticle();
+      }
+    }
+  }, [isClient, user, url, saveArticle, refreshArticles, router]);
 
   // Then, client-side only, we check if we need to redirect or show the redirect UI
   if (isClient && url && !isSaved && !article && 

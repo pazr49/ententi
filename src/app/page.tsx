@@ -1,15 +1,16 @@
 import { Suspense } from 'react';
-import { fetchRssFeed } from '@/utils/rss';
+import { fetchMultipleFeeds } from '@/utils/rss';
+import { feeds } from '@/utils/feedConfig';
 import ClientWrapper from '@/components/ClientWrapper';
-import Link from 'next/link';
+import UrlSubmitWrapper from '@/components/UrlSubmitWrapper';
 
-async function ArticleFeed() {
-  const feed = await fetchRssFeed();
+async function MultiFeeds() {
+  const allFeeds = await fetchMultipleFeeds(feeds);
   
   return (
-    <div className="article-list-container">
-      <h1 className="article-list-title">Articles to Practice With</h1>
-      <ClientWrapper serializedArticles={JSON.stringify(feed.items)} />
+    <div className="article-feeds-container">
+      <h1 className="article-list-title">News From Around The World</h1>
+      <ClientWrapper serializedFeeds={JSON.stringify(allFeeds)} />
     </div>
   );
 }
@@ -28,12 +29,7 @@ export default function Home() {
               perfectly adapted to your reading level with instant translations.
             </p>
             <div className="hero-cta-container">
-              <Link href="/auth/signup" className="hero-primary-button">
-                Start Learning
-              </Link>
-              <Link href="/saved" className="hero-secondary-button">
-                View My Articles
-              </Link>
+              <UrlSubmitWrapper />
             </div>
           </div>
         </div>
@@ -45,37 +41,47 @@ export default function Home() {
 
       <main className="pb-16">
         <Suspense fallback={
-          <div className="article-list-container">
-            <h1 className="article-list-title">Articles to Practice With</h1>
+          <div className="article-feeds-container">
+            <h1 className="article-list-title">News From Around The World</h1>
             <div className="animate-pulse">
-              <div className="article-list-grid">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="article-card-container">
-                    <div className="article-card">
-                      <div className="article-card-image-container bg-gray-200 dark:bg-gray-700"></div>
-                      <div className="article-card-content">
-                        <div className="article-card-meta">
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-                          <div className="h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-700"></div>
-                        </div>
-                        <div className="article-card-title h-14 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                        <div className="article-card-snippet">
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
-                        </div>
-                        <div className="article-card-read-link mt-auto">
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+              {/* Skeleton for multiple feeds */}
+              {[...Array(2)].map((_, feedIndex) => (
+                <div key={feedIndex} className="mb-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="article-card-container">
+                        <div className="article-card">
+                          <div className="article-card-image-container bg-gray-200 dark:bg-gray-700"></div>
+                          <div className="article-card-content">
+                            <div className="article-card-meta">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+                              <div className="h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-700"></div>
+                            </div>
+                            <div className="article-card-title h-14 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div className="article-card-snippet">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+                            </div>
+                            <div className="article-card-read-link mt-auto">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
         }>
-          <ArticleFeed />
+          <MultiFeeds />
         </Suspense>
       </main>
     </div>

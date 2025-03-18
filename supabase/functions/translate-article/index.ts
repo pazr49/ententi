@@ -261,21 +261,51 @@ async function translateHtmlContent(
     console.log(`Chunk ${chunkIndex + 1}: Extracted text (first 100 chars): ${extractedText.substring(0, 100)}`);
     
     try {
-      // Define a more direct prompt focusing on translation only
+      // Define a more sophisticated prompt for better translation quality
       const prompt = `
-      Translate the following text to ${targetLanguage} ${dialectInfo} and adapt it for readers at ${readingLevel}.
+      You are tasked with adapting an English text into ${targetLanguage} ${dialectInfo} suitable for readers at ${readingLevel} level. This adaptation is not a literal translation but a cultural and linguistic rewriting designed to preserve the original tone, style, and meaning.
+
+      Here is the text you will adapt:
+
+      <original_text>
+      ${extractedText.trim()}
+      </original_text>
+
+      Follow these instructions carefully:
+
+      Cultural and Linguistic Adaptation:
+      - Rewrite the text as if originally composed by a Colombian native, maintaining the original tone and seriousness.
+      - Use vocabulary, idiomatic expressions, and sentence structures natural to everyday Colombian Spanish.
+      - Adapt cultural references and idioms to equivalents familiar to a Colombian audience while strictly preserving the intended meaning and tone of the original.
+
+      Accessibility for Language Learners:
+      - Simplify complex vocabulary and grammar without overly simplifying or altering the seriousness or maturity of the content.
+      - Break down lengthy or complex sentences into shorter, clearer ones where appropriate.
+      - Use common, everyday vocabulary; retain some moderately challenging words to support learning.
+      - Provide clear context or brief explanations for culturally-specific terms or phrases. You may use parentheses for explanations, e.g., "La Arenosa (como llaman a Barranquilla los locales)".
+
+      Reinforce important or difficult concepts by repeating key ideas using varied phrasing to enhance comprehension.
+
+      Important: Do NOT translate:
+      - Words or phrases specifically being discussed or defined in the text.
+      - Proper nouns unless they have established Spanish equivalents.
+      - Technical terms that are being explained.
+      - Quoted terms or expressions that are the subject of the sentence.
+
+      Your goal is a text that feels authentically ${dialectInfo}, is educationally appropriate for intermediate learners, and clearly conveys the original message, tone, and style. Avoid adding emotional commentary or phrases that could alter the tone of the original text.
+
+      Keep in mind that the target reader is actually an adult English native speaker who is learning ${targetLanguage}. The goal is to adapt the vocabulary, grammar, and sentence structure to make it more accessible, without making it childish.
+
+      CRITICAL: Do NOT modify any placeholders like "${TAG_PREFIX}0${TAG_SUFFIX}", "${TAG_PREFIX}1${TAG_SUFFIX}", etc. 
+      These are HTML tag placeholders and must remain exactly as they appear in the original text.
+
+      Return only the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.`;
       
-      IMPORTANT: Do NOT modify any placeholders like "${TAG_PREFIX}0${TAG_SUFFIX}", "${TAG_PREFIX}1${TAG_SUFFIX}", etc. 
-      These are HTML tag placeholders and must remain unchanged in your translation.
-      
-      Text to translate:
-      "${extractedText.trim()}"
-      
-      Return only the translated text with the HTML tag placeholders exactly as they appear in the original.`;
       console.log(`Sending chunk to translation model...`);
       const response = await model.generateContent(prompt);
       let translatedText = response.response.text().trim();
       console.log(`Received translation. Length: ${translatedText.length} characters`);
+      
       if (translatedText === "") {
         console.error(`Received empty translation for chunk ${chunkIndex + 1}, using original chunk as fallback.`);
         translatedText = chunk;
@@ -421,10 +451,19 @@ serve(async (req: Request) => {
 
     // Process the title
     console.log(`Translating title...`);
-    const titlePrompt = `Translate the following title to ${languageName} ${dialectInfo} and adapt it to ${readingLevel}. Return only the translated title without any additional text or explanations:
-    
-    "${articleContent.title}"`;
-    
+    const titlePrompt = `
+    You are tasked with adapting the following title from English to ${languageName} ${dialectInfo} for readers at ${readingLevel}.
+
+    Create a title that:
+    1. Captures the essence and meaning of the original
+    2. Sounds natural to native ${languageName} speakers
+    3. Uses appropriate vocabulary for ${readingLevel}
+    4. Preserves the style and tone of the original (formal, casual, academic, etc.)
+
+    Original title: "${articleContent.title}"
+
+    Return only the translated title without any additional text, explanations, or quotation marks.`;
+
     const titleResponse = await model.generateContent(titlePrompt);
     const translatedTitle = titleResponse.response.text().trim();
     console.log(`Title translated: "${translatedTitle}"`);
