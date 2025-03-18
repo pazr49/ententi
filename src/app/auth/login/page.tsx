@@ -20,7 +20,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-indigo-900 dark:text-white mb-2">Welcome Back</h2>
-          <p className="text-gray-600 dark:text-gray-400">Sign in to access your saved articles</p>
+          <p className="text-gray-600 dark:text-gray-400">Sign in to continue your language learning journey</p>
         </div>
         <AuthForm 
           type="login" 

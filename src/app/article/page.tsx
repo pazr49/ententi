@@ -9,6 +9,7 @@ import { useSavedArticles } from '@/context/SavedArticlesContext';
 import { useAuth } from '@/context/AuthContext';
 import { callEdgeFunction } from '@/utils/supabase';
 import Link from 'next/link';
+import { getSavedArticlesFromLocalStorage } from '@/utils/articleService';
 
 export default function ArticlePage() {
   const searchParams = useSearchParams();
@@ -22,15 +23,20 @@ export default function ArticlePage() {
   const [isRemoving, setIsRemoving] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedArticle, setTranslatedArticle] = useState<ReadableArticle | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const { removeArticle, savedArticleGuids, savedArticles, refreshArticles, connectionError } = useSavedArticles();
+
+  const initialSavedArticles = typeof window !== 'undefined' ? getSavedArticlesFromLocalStorage() : [];
+  const isSavedFromLocal = url ? (initialSavedArticles.some(article => article.link === url) || initialSavedArticles.some(article => article.guid === url || article.guid === encodeURIComponent(url))) : false;
 
   // Create a unique ID for the article based on the URL
   const articleId = url ? encodeURIComponent(url) : '';
   
-  // Check if this article is in the saved list using savedArticleGuids Set
+  // Update the isSaved definition to include local saved articles
   const isSaved = savedArticleGuids.has(articleId) || 
                   (url && savedArticleGuids.has(url)) || 
-                  savedArticles.some(article => article.link === url);
+                  savedArticles.some(article => article.link === url) || 
+                  isSavedFromLocal;
   
   // Find the saved article object
   const savedArticle = savedArticles.find(
@@ -39,18 +45,92 @@ export default function ArticlePage() {
                article.link === url
   );
 
-  // If the article is not saved, redirect to the original URL
+  // First, let's add functionality to load article from sessionStorage on mount
   useEffect(() => {
-    if (url && !isSaved) {
-      console.log('Article not saved, redirecting to original URL:', url);
+    if (isClient && url) {
+      // Store current URL for tracking
+      const storedUrl = sessionStorage.getItem('currentArticleUrl');
+      
+      // If we have a stored article and its URL matches the current URL, load it
+      if (storedUrl === url) {
+        const storedArticle = sessionStorage.getItem('currentArticle');
+        if (storedArticle) {
+          try {
+            setArticle(JSON.parse(storedArticle));
+          } catch (err) {
+            console.error('Error parsing stored article:', err);
+          }
+        }
+      }
+    }
+  }, [url, isClient]);
+
+  // Then, update the fetchArticle function to store the article data
+  useEffect(() => {
+    async function fetchArticle() {
+      if (!url) {
+        setError('No URL provided');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await fetch(`/api/article?url=${encodeURIComponent(url)}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch article: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setArticle(data);
+        
+        // Store the article and URL in sessionStorage
+        if (isClient) {
+          try {
+            sessionStorage.setItem('currentArticle', JSON.stringify(data));
+            sessionStorage.setItem('currentArticleUrl', url);
+          } catch (err) {
+            console.error('Error storing article in sessionStorage:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching article:', err);
+        setError('Failed to load article');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    if (isSaved) {
+      fetchArticle();
+    }
+  }, [url, isSaved, isClient]);
+
+  // Update the redirect useEffect to also check for isClient
+  useEffect(() => {
+    // Only proceed if we're on the client
+    if (!isClient || !url) return;
+    
+    const readerFlag = sessionStorage.getItem('articleReaderView');
+    const storedUrl = sessionStorage.getItem('currentArticleUrl');
+    
+    // Only redirect if:
+    // 1. Article isn't saved
+    // 2. No article in state
+    // 3. Either no reader flag OR the stored URL is different from current URL
+    if (!isSaved && !article && (!readerFlag || storedUrl !== url)) {
+      console.log('Article not saved and article not loaded, redirecting to original URL:', url);
       window.location.href = url;
     }
-  }, [url, isSaved]);
+  }, [url, isSaved, article, isClient]);
 
-  // Refresh saved articles when the component mounts
+  // Set the reader view flag when the article is loaded
   useEffect(() => {
-    refreshArticles();
-  }, [refreshArticles]);
+    if (article && isClient) {
+      sessionStorage.setItem('articleReaderView', 'true');
+    }
+  }, [article, isClient]);
 
   // Update local error state when connection error changes
   useEffect(() => {
@@ -80,7 +160,7 @@ export default function ArticlePage() {
   };
 
   // Handle translation and reading level adaptation
-  const handleTranslate = async (language: string, readingAge: string) => {
+  const handleTranslate = async (language: string, readingAge: string, region?: string) => {
     if (!article) return;
     
     // Check if user is authenticated
@@ -95,7 +175,7 @@ export default function ArticlePage() {
       
       // Call the Supabase Edge Function for translation
       const translatedData = await callEdgeFunction<
-        { articleContent: ReadableArticle; targetLanguage: string; readingAge: string },
+        { articleContent: ReadableArticle; targetLanguage: string; readingAge: string; region?: string },
         ReadableArticle
       >(
         'translate-article',
@@ -103,6 +183,7 @@ export default function ArticlePage() {
           articleContent: article,
           targetLanguage: language,
           readingAge: readingAge,
+          region: region
         }
       );
       
@@ -115,37 +196,6 @@ export default function ArticlePage() {
     }
   };
 
-  useEffect(() => {
-    async function fetchArticle() {
-      if (!url) {
-        setError('No URL provided');
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        const response = await fetch(`/api/article?url=${encodeURIComponent(url)}`);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch article: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setArticle(data);
-      } catch (err) {
-        console.error('Error fetching article:', err);
-        setError('Failed to load article');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    if (isSaved) {
-      fetchArticle();
-    }
-  }, [url, isSaved]);
-
   // Add debugging information
   useEffect(() => {
     console.log('Article ID:', articleId);
@@ -154,7 +204,19 @@ export default function ArticlePage() {
     console.log('All Saved Articles:', savedArticles);
   }, [articleId, isSaved, savedArticle, savedArticles]);
 
-  if (!isSaved && url) {
+  useEffect(() => {
+    refreshArticles();
+  }, [refreshArticles]);
+
+  // Add a useEffect to set isClient to true once the component mounts on the client
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Then, client-side only, we check if we need to redirect or show the redirect UI
+  if (isClient && url && !isSaved && !article && 
+      (!sessionStorage.getItem('articleReaderView') || 
+       sessionStorage.getItem('currentArticleUrl') !== url)) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <main className="py-12 px-4">
@@ -176,6 +238,27 @@ export default function ArticlePage() {
               >
                 Back to Home
               </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!isClient) {
+    // During server-side rendering, show a loading state
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <main className="py-6">
+          <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4 mb-6"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-1/4 mb-8"></div>
+              <div className="space-y-4">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4"></div>
+              </div>
             </div>
           </div>
         </main>

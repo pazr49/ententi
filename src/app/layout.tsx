@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PocketClone - Save and Read Articles",
-  description: "A Pocket clone for saving and reading articles in a clean, distraction-free environment",
+  title: "Ententi - Learn Languages Through Reading",
+  description: "Learn any language by reading content you love, perfectly adapted to your reading level with instant translations",
 };
 
 export default function RootLayout({

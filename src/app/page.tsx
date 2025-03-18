@@ -8,7 +8,7 @@ async function ArticleFeed() {
   
   return (
     <div className="article-list-container">
-      <h1 className="article-list-title">Latest News</h1>
+      <h1 className="article-list-title">Articles to Practice With</h1>
       <ClientWrapper serializedArticles={JSON.stringify(feed.items)} />
     </div>
   );
@@ -21,18 +21,18 @@ export default function Home() {
         <div className="hero-container">
           <div className="hero-content">
             <h1 className="hero-title">
-              Discover and Save <span className="text-indigo-600 dark:text-indigo-400">Articles</span> You Love
+              Learn Languages Through <span className="text-indigo-600 dark:text-indigo-400">Personalized Reading</span>
             </h1>
             <p className="hero-subtitle">
-              PocketClone helps you save articles from around the web for distraction-free reading later, 
-              all in one beautiful, organized space.
+              Ententi helps you learn any language by reading content you love, 
+              perfectly adapted to your reading level with instant translations.
             </p>
             <div className="hero-cta-container">
               <Link href="/auth/signup" className="hero-primary-button">
-                Get Started
+                Start Learning
               </Link>
               <Link href="/saved" className="hero-secondary-button">
-                View Saved Articles
+                View My Articles
               </Link>
             </div>
           </div>
@@ -46,7 +46,7 @@ export default function Home() {
       <main className="pb-16">
         <Suspense fallback={
           <div className="article-list-container">
-            <h1 className="article-list-title">Latest News</h1>
+            <h1 className="article-list-title">Articles to Practice With</h1>
             <div className="animate-pulse">
               <div className="article-list-grid">
                 {[...Array(6)].map((_, i) => (

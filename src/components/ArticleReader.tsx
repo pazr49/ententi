@@ -12,9 +12,20 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
   const [processedContent, setProcessedContent] = useState<string>('');
   const [publishDate, setPublishDate] = useState<string | null>(null);
 
+  // Reset processed content when article changes
+  useEffect(() => {
+    setProcessedContent('');
+  }, [article?.title]);
+
   // Process the article content to add custom styling
   useEffect(() => {
     if (article && article.content) {
+      // Log for debugging
+      console.log("Processing article content in ArticleReader", { 
+        title: article.title,
+        contentLength: article.content.length 
+      });
+      
       // Create a temporary DOM element to manipulate the HTML
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = article.content;

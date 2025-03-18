@@ -1,45 +1,120 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface TranslationSettingsProps {
-  onTranslate: (language: string, readingAge: string) => Promise<void>;
+  onTranslate: (language: string, readingAge: string, region?: string) => Promise<void>;
   isTranslating: boolean;
+}
+
+interface LanguageOption {
+  code: string;
+  name: string;
+  regions?: {
+    code: string;
+    name: string;
+  }[];
 }
 
 export default function TranslationSettings({ onTranslate, isTranslating }: TranslationSettingsProps) {
   const [targetLanguage, setTargetLanguage] = useState<string>('');
   const [readingAge, setReadingAge] = useState<string>('');
+  const [region, setRegion] = useState<string>('');
+  const [availableRegions, setAvailableRegions] = useState<{ code: string; name: string }[]>([]);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
-  const languages = [
+  // Updated language options with regions
+  const languages: LanguageOption[] = [
     { code: '', name: 'Select language' },
-    { code: 'es', name: 'Spanish' },
-    { code: 'fr', name: 'French' },
-    { code: 'de', name: 'German' },
-    { code: 'it', name: 'Italian' },
-    { code: 'pt', name: 'Portuguese' },
-    { code: 'zh', name: 'Chinese' },
-    { code: 'ja', name: 'Japanese' },
-    { code: 'ko', name: 'Korean' },
-    { code: 'ru', name: 'Russian' },
-    { code: 'ar', name: 'Arabic' },
+    { 
+      code: 'es', 
+      name: 'Spanish',
+      regions: [
+        { code: 'es', name: 'Spain' },
+        { code: 'mx', name: 'Mexico' },
+        { code: 'co', name: 'Colombia' },
+        { code: 'ar', name: 'Argentina' },
+        { code: 'pe', name: 'Peru' },
+        { code: 'cl', name: 'Chile' }
+      ]
+    },
+    { 
+      code: 'fr', 
+      name: 'French',
+      regions: [
+        { code: 'fr', name: 'France' },
+        { code: 'ca', name: 'Canada' },
+        { code: 'be', name: 'Belgium' },
+        { code: 'ch', name: 'Switzerland' }
+      ]
+    },
+    { 
+      code: 'de', 
+      name: 'German',
+      regions: [
+        { code: 'de', name: 'Germany' },
+        { code: 'at', name: 'Austria' },
+        { code: 'ch', name: 'Switzerland' }
+      ]
+    },
+    { 
+      code: 'it', 
+      name: 'Italian',
+      regions: [
+        { code: 'it', name: 'Italy' },
+        { code: 'ch', name: 'Switzerland' }
+      ]
+    },
+    { 
+      code: 'pt', 
+      name: 'Portuguese',
+      regions: [
+        { code: 'pt', name: 'Portugal' },
+        { code: 'br', name: 'Brazil' }
+      ]
+    }
   ];
 
+  // Simplified reading levels (ages hidden from UI but used in the backend)
   const readingLevels = [
     { value: '', label: 'Select reading level' },
-    { value: 'elementary', label: 'Elementary (6-8 years)' },
-    { value: 'middle', label: 'Middle School (9-13 years)' },
-    { value: 'high', label: 'High School (14-18 years)' },
-    { value: 'college', label: 'College (18+ years)' },
-    { value: 'professional', label: 'Professional' },
+    { value: 'beginner', label: 'Beginner' }, // 8-11 years old
+    { value: 'intermediate', label: 'Intermediate' }, // 12-15 years old
+    { value: 'advanced', label: 'Advanced' } // 16+ years old
   ];
+
+  // Update available regions when language changes
+  useEffect(() => {
+    if (targetLanguage) {
+      const selectedLanguage = languages.find(lang => lang.code === targetLanguage);
+      if (selectedLanguage && selectedLanguage.regions) {
+        setAvailableRegions(selectedLanguage.regions);
+        setRegion(selectedLanguage.regions[0].code); // Set default to first region (usually the origin country)
+      } else {
+        setAvailableRegions([]);
+        setRegion('');
+      }
+    } else {
+      setAvailableRegions([]);
+      setRegion('');
+    }
+  }, [targetLanguage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (targetLanguage && readingAge) {
-      onTranslate(targetLanguage, readingAge);
+      // Map reading levels to age ranges for the LLM prompt
+      let readingAgeValue = readingAge;
+      if (readingAge === 'beginner') readingAgeValue = 'elementary'; // 8-11 years
+      if (readingAge === 'intermediate') readingAgeValue = 'middle'; // 12-15 years
+      if (readingAge === 'advanced') readingAgeValue = 'high'; // 16+ years
+      
+      onTranslate(targetLanguage, readingAgeValue, region);
     }
+  };
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setTargetLanguage(e.target.value);
   };
 
   return (
@@ -103,7 +178,7 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
                 <select
                   id="language"
                   value={targetLanguage}
-                  onChange={(e) => setTargetLanguage(e.target.value)}
+                  onChange={handleLanguageChange}
                   className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
                   required
                   disabled={isTranslating}
@@ -136,6 +211,27 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
                 </select>
               </div>
             </div>
+            
+            {availableRegions.length > 0 && (
+              <div className="mb-4">
+                <label htmlFor="region" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Region/Dialect
+                </label>
+                <select
+                  id="region"
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
+                  disabled={isTranslating}
+                >
+                  {availableRegions.map((reg) => (
+                    <option key={reg.code} value={reg.code}>
+                      {reg.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             
             <button
               type="submit"
