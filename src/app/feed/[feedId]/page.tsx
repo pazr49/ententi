@@ -11,6 +11,12 @@ export function generateStaticParams() {
   return feedIds.map(feedId => ({ feedId }));
 }
 
+/* Updated type definition for page props */
+type FeedPageProps = {
+  params: Promise<{ feedId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
 async function FeedContent({ feedId }: { feedId: string }) {
   const feedConfig = getFeedById(feedId);
   
@@ -41,7 +47,9 @@ async function FeedContent({ feedId }: { feedId: string }) {
   );
 }
 
-export default function FeedPage({ params }: { params: { feedId: string } }) {
+export default async function FeedPage(props: FeedPageProps) {
+  const resolvedParams = (typeof props.params === 'object' && 'then' in props.params) ? await props.params : props.params;
+  const { feedId } = resolvedParams;
   return (
     <div className="container mx-auto px-4 py-8">
       <Link 
@@ -59,12 +67,10 @@ export default function FeedPage({ params }: { params: { feedId: string } }) {
         </svg>
         Back to All Feeds
       </Link>
-      
       <Suspense fallback={
         <div className="animate-pulse">
           <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-8"></div>
           <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-8"></div>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(9)].map((_, i) => (
               <div key={i} className="article-card-container">
@@ -91,7 +97,7 @@ export default function FeedPage({ params }: { params: { feedId: string } }) {
           </div>
         </div>
       }>
-        <FeedContent feedId={params.feedId} />
+        <FeedContent feedId={feedId} />
       </Suspense>
     </div>
   );
