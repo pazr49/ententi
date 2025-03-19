@@ -47,10 +47,27 @@ export const signIn = async (email: string, password: string) => {
 
 // Sign in with Google
 export const signInWithGoogle = async () => {
+  // Determine the correct redirect URL
+  let redirectUrl = `${window.location.origin}/auth/callback`;
+  
+  // If we're in production (not localhost), use the Vercel URL
+  if (typeof window !== 'undefined' && !window.location.origin.includes('localhost')) {
+    // Use window.location.origin which will be the Vercel URL in production
+    redirectUrl = `${window.location.origin}/auth/callback`;
+  } else if (typeof window !== 'undefined' && window.location.origin.includes('localhost')) {
+    // Local development
+    redirectUrl = `${window.location.origin}/auth/callback`;
+  } else {
+    // Fallback for SSR or other environments
+    redirectUrl = 'https://ententi.vercel.app/auth/callback';
+  }
+  
+  console.log('Auth redirect URL:', redirectUrl);
+  
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: redirectUrl,
     },
   });
   

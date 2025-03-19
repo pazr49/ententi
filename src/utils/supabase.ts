@@ -1,18 +1,33 @@
 import { createClient } from '@supabase/supabase-js';
 
-// These should be environment variables in a production environment
+// Get environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
+// Log environment info but not credentials
 console.log('Supabase URL:', supabaseUrl);
 console.log('Supabase Anon Key exists:', !!supabaseAnonKey);
 
+// Check for missing credentials
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase credentials are missing. Make sure .env.local file exists with proper values.');
+  console.error('Supabase credentials are missing. Make sure environment variables are properly set.');
+  
+  // In development, show a more helpful message
+  if (process.env.NODE_ENV === 'development') {
+    console.error('For local development, make sure .env.local file exists with the following variables:');
+    console.error('NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co');
+    console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key');
+  }
 }
 
-// Create a single supabase client for interacting with your database
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create supabase client with additional options for better reliability
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 
 // Test function to verify Supabase connection
 export const testSupabaseConnection = async () => {
