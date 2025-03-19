@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
 
-export default function LoginPage() {
+// Create a wrapper component for the actual content
+function LoginContent() {
   const { signIn, signInWithGoogle, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,5 +70,21 @@ export default function LoginPage() {
         />
       </div>
     </div>
+  );
+}
+
+// Wrap the component that uses useSearchParams in a Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400">Loading login page...</p>
+        </div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 } 

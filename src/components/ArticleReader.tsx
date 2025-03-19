@@ -3,10 +3,11 @@ import { ReadableArticle } from '@/utils/readability';
 
 interface ArticleReaderProps {
   article: ReadableArticle;
-  isLoading: boolean;
+  isLoading?: boolean;
+  originalUrl?: string;
 }
 
-export default function ArticleReader({ article, isLoading }: ArticleReaderProps) {
+export default function ArticleReader({ article, isLoading = false, originalUrl }: ArticleReaderProps) {
   const [fontSize, setFontSize] = useState<'text-base' | 'text-lg' | 'text-xl'>('text-base');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [processedContent, setProcessedContent] = useState<string>('');
@@ -23,7 +24,8 @@ export default function ArticleReader({ article, isLoading }: ArticleReaderProps
       // Log for debugging
       console.log("Processing article content in ArticleReader", { 
         title: article.title,
-        contentLength: article.content.length 
+        contentLength: article.content.length,
+        originalUrl: originalUrl // Log the originalUrl for debugging
       });
       
       // Create a temporary DOM element to manipulate the HTML

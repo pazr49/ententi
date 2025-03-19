@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ArticleReader from '@/components/ArticleReader';
 import TranslationSettings from '@/components/TranslationSettings';
@@ -11,7 +11,8 @@ import { callEdgeFunction } from '@/utils/supabase';
 import Link from 'next/link';
 import { getSavedArticlesFromLocalStorage } from '@/utils/articleService';
 
-export default function ArticlePage() {
+// Create a wrapper component for the actual content
+function ArticleContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const url = searchParams.get('url');
@@ -318,178 +319,152 @@ export default function ArticlePage() {
     }
   }, [isClient, user, url, saveArticle, refreshArticles, router]);
 
-  // Then, client-side only, we check if we need to redirect or show the redirect UI
-  if (isClient && url && !isSaved && !article && 
-      (!sessionStorage.getItem('articleReaderView') || 
-       sessionStorage.getItem('currentArticleUrl') !== url)) {
+  // Display a loading indicator while article data is being fetched
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <main className="py-12 px-4">
-          <div className="max-w-3xl mx-auto p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-            <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Redirecting to original article...</h1>
-            <p className="mb-6 text-gray-600 dark:text-gray-300">
-              This article is not saved. You can only read articles in reader view after saving them.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <a 
-                href={url} 
-                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                Go to Original Article
-              </a>
-              <Link 
-                href="/" 
-                className="px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-              >
-                Back to Home
-              </Link>
-            </div>
-          </div>
-        </main>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-500 dark:text-gray-400">Loading article...</p>
       </div>
     );
   }
 
-  if (!isClient) {
-    // During server-side rendering, show a loading state
+  // Display an error message if something went wrong
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <main className="py-6">
-          <div className="max-w-3xl mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4 mb-6"></div>
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-1/4 mb-8"></div>
-              <div className="space-y-4">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-full"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4"></div>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="sticky top-0 z-20 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center space-x-4">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-2xl w-full">
+          <h2 className="text-red-700 dark:text-red-400 text-lg font-semibold mb-3">Error Loading Article</h2>
+          <p className="text-gray-700 dark:text-gray-300 mb-6">{error}</p>
+          <div className="flex space-x-4">
             <Link 
               href="/saved" 
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              aria-label="Back to saved articles"
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition duration-200"
             >
-              <svg 
-                className="w-5 h-5 text-gray-600 dark:text-gray-300" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24" 
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18" 
-                />
-              </svg>
+              Go to Saved Articles
             </Link>
-            <div className="text-sm text-gray-600 dark:text-gray-300">
-              <p className="font-medium">Reader View</p>
-              {savedArticle && (
-                <a 
-                  href={savedArticle.link} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
-                >
-                  View Original
-                </a>
-              )}
-            </div>
+            <Link 
+              href="/" 
+              className="px-4 py-2 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition duration-200"
+            >
+              Go to Feeds
+            </Link>
           </div>
-          <button
-            onClick={handleRemoveArticle}
-            disabled={isRemoving}
-            className={`px-4 py-1.5 rounded-lg text-white text-sm bg-red-500 hover:bg-red-600 transition-colors focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-              isRemoving ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            {isRemoving ? 'Unsaving...' : 'Unsave'}
-          </button>
         </div>
-      </header>
-
-      <main className="py-6">
-        {error ? (
-          <div className="max-w-3xl mx-auto p-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="flex flex-col items-center">
-              <svg 
-                className="w-16 h-16 text-red-500 mb-4" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24" 
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                />
-              </svg>
-              <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Error Loading Article</h2>
-              <p className="text-center text-red-500 mb-6">{error}</p>
-              {!url && (
-                <p className="text-center text-gray-600 dark:text-gray-300 mb-6">
-                  Please provide a URL to read an article
-                </p>
-              )}
-              <Link 
-                href="/saved" 
-                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                Back to Saved Articles
-              </Link>
-            </div>
+      </div>
+    );
+  }
+  
+  // If no article data is available, suggest browsing saved articles
+  if (!article) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-lg max-w-2xl w-full">
+          <h2 className="text-indigo-700 dark:text-indigo-400 text-lg font-semibold mb-3">No Article Selected</h2>
+          <p className="text-gray-700 dark:text-gray-300 mb-6">
+            No article data available. Please select an article from your saved articles or browse feeds.
+          </p>
+          <div className="flex space-x-4">
+            <Link 
+              href="/saved" 
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition duration-200"
+            >
+              Go to Saved Articles
+            </Link>
+            <Link 
+              href="/" 
+              className="px-4 py-2 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition duration-200"
+            >
+              Go to Feeds
+            </Link>
           </div>
-        ) : (
+        </div>
+      </div>
+    );
+  }
+
+  // If article data is available, render the ArticleReader and TranslationSettings
+  return (
+    <div className="article-page-container">
+      <div className="article-page-content">
+        {article && (
           <>
-            <div className="max-w-3xl mx-auto mb-4 px-4">
-              <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 dark:border-amber-500 p-4 mb-4 rounded-r-md">
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  <strong>Legal Notice:</strong> This reader view is only available for articles you&apos;ve saved. 
-                  The content is fetched on-demand and not stored permanently. 
-                  This approach respects copyright by only storing the URL until you request to read it.
-                </p>
-              </div>
+            <div className="mb-6 flex items-center justify-between">
+              <Link 
+                href={savedArticle ? "/saved" : "/"} 
+                className="inline-flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-4 w-4 mr-2" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18" 
+                  />
+                </svg>
+                Back to {savedArticle ? "Saved Articles" : "Feeds"}
+              </Link>
               
-              {/* Only show the translation component if the feature flag is enabled AND user is authenticated */}
-              {process.env.NEXT_PUBLIC_ENABLE_TRANSLATION === 'true' && user && (
-                <TranslationSettings 
-                  onTranslate={handleTranslate}
-                  isTranslating={isTranslating}
-                />
-              )}
-              
-              {/* Show login prompt if translation is enabled but user is not authenticated */}
-              {process.env.NEXT_PUBLIC_ENABLE_TRANSLATION === 'true' && !user && (
-                <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-400 dark:border-indigo-500 p-4 rounded-r-md">
-                  <p className="text-sm text-indigo-800 dark:text-indigo-300">
-                    <strong>Translation Feature:</strong> Log in to translate this article to different languages and adapt it to your preferred reading level.
-                  </p>
-                </div>
+              {isSaved && (
+                <button
+                  onClick={handleRemoveArticle}
+                  disabled={isRemoving}
+                  className="inline-flex items-center text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                >
+                  {isRemoving ? (
+                    <span className="inline-flex items-center">
+                      <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Removing...
+                    </span>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove from Saved
+                    </>
+                  )}
+                </button>
               )}
             </div>
+            
+            {user && (
+              <TranslationSettings 
+                onTranslate={handleTranslate}
+                isTranslating={isTranslating}
+              />
+            )}
+            
             <ArticleReader 
-              article={translatedArticle || article as ReadableArticle} 
-              isLoading={isLoading || isTranslating} 
+              article={translatedArticle || article} 
+              originalUrl={url || ''}
             />
           </>
         )}
-      </main>
+      </div>
     </div>
+  );
+}
+
+// Wrap the component that uses useSearchParams in a Suspense boundary
+export default function ArticlePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-500 dark:text-gray-400">Loading article page...</p>
+      </div>
+    }>
+      <ArticleContent />
+    </Suspense>
   );
 } 
