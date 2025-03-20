@@ -4,6 +4,7 @@ import { paulGrahamProcessor } from './paulGrahamProcessor';
 import { techCrunchProcessor } from './techCrunchProcessor';
 import { bbcProcessor } from './bbcProcessor';
 import { guardianProcessor } from './guardianProcessor';
+import { nytProcessor } from './nytProcessor';
 import { defaultProcessor } from './defaultProcessor';
 
 // Export all processors
@@ -12,6 +13,7 @@ export { paulGrahamProcessor } from './paulGrahamProcessor';
 export { techCrunchProcessor } from './techCrunchProcessor';
 export { bbcProcessor } from './bbcProcessor';
 export { guardianProcessor } from './guardianProcessor';
+export { nytProcessor } from './nytProcessor';
 export { defaultProcessor } from './defaultProcessor';
 
 // Array of all site-specific processors in order of preference
@@ -19,6 +21,7 @@ const processors: ArticleProcessor[] = [
   techCrunchProcessor,
   bbcProcessor,
   guardianProcessor,
+  nytProcessor,
   paulGrahamProcessor,
   // Add more processors here as they are created
   defaultProcessor // Always keep default processor last
@@ -40,6 +43,7 @@ export function processArticle(url: string | null | undefined, article: Readable
     console.log(`Checking processor: ${p === bbcProcessor ? 'BBC' : 
                                      p === guardianProcessor ? 'Guardian' : 
                                      p === techCrunchProcessor ? 'TechCrunch' : 
+                                     p === nytProcessor ? 'NYT' :
                                      p === paulGrahamProcessor ? 'Paul Graham' : 
                                      'Default'} - Can process: ${canProcess}`);
     return canProcess;
@@ -48,6 +52,7 @@ export function processArticle(url: string | null | undefined, article: Readable
   console.log("Selected processor:", processor === bbcProcessor ? 'BBC' : 
                                    processor === guardianProcessor ? 'Guardian' : 
                                    processor === techCrunchProcessor ? 'TechCrunch' : 
+                                   processor === nytProcessor ? 'NYT' :
                                    processor === paulGrahamProcessor ? 'Paul Graham' : 
                                    'Default');
   
