@@ -12,5 +12,6 @@ export interface ArticleProcessor {
   canProcess: (url: string) => boolean;
   
   // Process the article content and return the processed result
-  process: (url: string, article: ReadableArticle) => ArticleProcessingResult;
+  // thumbnailUrl is optional and can be used to ensure hero images are present
+  process: (url: string, article: ReadableArticle, thumbnailUrl?: string) => ArticleProcessingResult;
 } 

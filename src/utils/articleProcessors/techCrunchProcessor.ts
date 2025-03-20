@@ -7,7 +7,7 @@ export const techCrunchProcessor: ArticleProcessor = {
     return url.includes('techcrunch.com');
   },
   
-  process: (url: string, article: ReadableArticle): ArticleProcessingResult => {
+  process: (url: string, article: ReadableArticle, thumbnailUrl?: string): ArticleProcessingResult => {
     const result: ArticleProcessingResult = {
       processedContent: article.content
     };
@@ -18,98 +18,89 @@ export const techCrunchProcessor: ArticleProcessor = {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = article.content;
     
-    // First remove common unwanted elements
-    removeCommonUnwantedElements(tempDiv);
-    
-    // Extract author image
+    // Extract author image from TechCrunch specific selectors
     let authorImage: string | null = null;
+    const profileImgs = tempDiv.querySelectorAll('.article-byline img[src*="profile"], img[class*="avatar"], img[class*="profile"]');
     
-    // First check for TechCrunch-specific author thumbnails
-    const authorThumbElements = tempDiv.querySelectorAll('.post-authors-list__author-thumb, img[src*="headshot.jpg"]');
-    if (authorThumbElements.length > 0) {
-      const authorImgElement = authorThumbElements[0] as HTMLImageElement;
-      if (authorImgElement && authorImgElement.src) {
-        authorImage = authorImgElement.src;
-        console.log("Found TechCrunch author image:", authorImage);
-        
-        // Remove all instances of this author image from the content
-        const allImages = tempDiv.querySelectorAll('img');
-        allImages.forEach(img => {
-          if (img.src === authorImage || 
-              (authorImage && img.src.includes(authorImage.split('/').pop() || ''))) {
-            // Remove the parent container if it looks like an author container
-            const parent = img.closest('.post-authors-list') || 
-                           img.closest('[class*="author"]') || 
-                           img.closest('li') ||
-                           img.parentElement;
-            if (parent) {
+    if (profileImgs.length > 0) {
+      authorImage = profileImgs[0].getAttribute('src');
+      console.log("Found author image:", authorImage);
+    }
+    
+    // Remove all instances of the author image from the content
+    if (authorImage) {
+      const allImages = tempDiv.querySelectorAll('img');
+      allImages.forEach(img => {
+        if (img.getAttribute('src') === authorImage) {
+          const parent = img.parentElement;
+          if (parent) {
+            // Check if parent is an author container
+            if (parent.classList.contains('article-byline') || 
+                parent.classList.toString().includes('author') || 
+                parent.classList.toString().includes('profile')) {
               parent.remove();
             } else {
               img.remove();
             }
+          } else {
+            img.remove();
           }
-        });
+        }
+      });
+    }
+    
+    // TechCrunch specific cleanup
+    // Remove "Related Articles" section
+    const relatedArticles = tempDiv.querySelectorAll('[class*="related-articles"]');
+    relatedArticles.forEach(el => el.remove());
+    
+    // Remove social media sharing elements
+    const socialElements = tempDiv.querySelectorAll('[class*="social"], [id*="social"]');
+    socialElements.forEach(el => el.remove());
+    
+    // Add hero image if needed
+    let hasHeroImage = false;
+    if (thumbnailUrl) {
+      const existingImages = tempDiv.querySelectorAll('img');
+      
+      // Check if we already have a matching image in the content
+      existingImages.forEach(img => {
+        if (img.src === thumbnailUrl) {
+          hasHeroImage = true;
+        }
+      });
+      
+      // If no hero image found and we have a thumbnail URL, add it
+      if (!hasHeroImage) {
+        console.log("Adding hero image from thumbnail:", thumbnailUrl);
+        
+        // Create figure and image elements
+        const figure = document.createElement('figure');
+        figure.className = 'hero-image';
+        
+        const img = document.createElement('img');
+        img.src = thumbnailUrl;
+        img.alt = article.title;
+        img.className = 'hero-image-img';
+        
+        figure.appendChild(img);
+        
+        // Add the hero image to the beginning of the content
+        if (tempDiv.firstChild) {
+          tempDiv.insertBefore(figure, tempDiv.firstChild);
+        } else {
+          tempDiv.appendChild(figure);
+        }
       }
     }
     
-    // Remove any author containers that might remain
-    const authorContainers = tempDiv.querySelectorAll(
-      '.post-authors-list, .wp-block-techcrunch-post-authors-list, [class*="post-author"]'
-    );
-    authorContainers.forEach(container => {
-      // Before removing, check if it contains an image we should use
-      if (!authorImage) {
-        const img = container.querySelector('img');
-        if (img && img.src) {
-          authorImage = img.src;
-          console.log("Found author image in container:", authorImage);
-        }
-      }
-      container.remove();
-    });
-    
-    // Look for author images in other common patterns for TechCrunch
-    if (!authorImage) {
-      // Try other common patterns
-      const possibleAuthorImgs = tempDiv.querySelectorAll('img[src*="author"], img[src*="profile"], img[src*="headshot"]');
-      if (possibleAuthorImgs.length > 0) {
-        const img = possibleAuthorImgs[0] as HTMLImageElement;
-        if (img && img.src) {
-          authorImage = img.src;
-          console.log("Found author image via pattern:", authorImage);
-          img.remove();
-          
-          // Remove any other instances of the same image
-          const allImages = tempDiv.querySelectorAll('img');
-          allImages.forEach(otherImg => {
-            if (otherImg.src === authorImage || 
-                (authorImage && otherImg.src.includes(authorImage.split('/').pop() || ''))) {
-              otherImg.remove();
-            }
-          });
-        }
-      }
-    }
-    
-    // TechCrunch-specific cleanups
-    
-    // Remove topic tags section
-    const topicSections = tempDiv.querySelectorAll('.wp-block-tc23-post-relevant-terms');
-    topicSections.forEach(section => section.remove());
-    
-    // Remove featured image credit if it's duplicated in the caption
-    const featuredImageCaptions = tempDiv.querySelectorAll('.wp-block-post-featured-image figcaption');
-    featuredImageCaptions.forEach(caption => {
-      if (caption.textContent?.includes('Image Credits:') || caption.textContent?.includes('Credit:')) {
-        // This is likely a duplicate of the attribution that's already in the image
-        caption.remove();
-      }
-    });
+    // Remove common unwanted elements
+    removeCommonUnwantedElements(tempDiv);
     
     // Apply common styling
     applyCommonStyling(tempDiv);
     
-    // Format and extract date if available
+    // Extract and format publication date if available
     if (article.publishedTime) {
       try {
         const date = new Date(article.publishedTime);

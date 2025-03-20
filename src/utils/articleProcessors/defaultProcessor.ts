@@ -8,7 +8,7 @@ export const defaultProcessor: ArticleProcessor = {
     return true;
   },
   
-  process: (url: string, article: ReadableArticle): ArticleProcessingResult => {
+  process: (url: string, article: ReadableArticle, thumbnailUrl?: string): ArticleProcessingResult => {
     const result: ArticleProcessingResult = {
       processedContent: article.content
     };
@@ -48,6 +48,42 @@ export const defaultProcessor: ArticleProcessor = {
           img.remove();
         }
       });
+    }
+    
+    // Add hero image if needed
+    let hasHeroImage = false;
+    if (thumbnailUrl) {
+      const existingImages = tempDiv.querySelectorAll('img');
+      
+      // Check if we already have a matching image in the content
+      existingImages.forEach(img => {
+        if (img.src === thumbnailUrl) {
+          hasHeroImage = true;
+        }
+      });
+      
+      // If no hero image found and we have a thumbnail URL, add it
+      if (!hasHeroImage) {
+        console.log("Adding hero image from thumbnail:", thumbnailUrl);
+        
+        // Create figure and image elements
+        const figure = document.createElement('figure');
+        figure.className = 'hero-image';
+        
+        const img = document.createElement('img');
+        img.src = thumbnailUrl;
+        img.alt = article.title;
+        img.className = 'hero-image-img';
+        
+        figure.appendChild(img);
+        
+        // Add the hero image to the beginning of the content
+        if (tempDiv.firstChild) {
+          tempDiv.insertBefore(figure, tempDiv.firstChild);
+        } else {
+          tempDiv.appendChild(figure);
+        }
+      }
     }
     
     // Remove common unwanted elements

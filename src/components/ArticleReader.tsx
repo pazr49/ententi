@@ -6,9 +6,10 @@ interface ArticleReaderProps {
   article: ReadableArticle;
   isLoading?: boolean;
   originalUrl?: string;
+  thumbnailUrl?: string;
 }
 
-export default function ArticleReader({ article, isLoading = false, originalUrl }: ArticleReaderProps) {
+export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl }: ArticleReaderProps) {
   const [fontSize, setFontSize] = useState<'text-base' | 'text-lg' | 'text-xl'>('text-base');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [processedContent, setProcessedContent] = useState<string>('');
@@ -36,12 +37,13 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
       console.log("Processing article content in ArticleReader", { 
         title: article.title,
         contentLength: article.content.length,
-        originalUrl: originalUrl // Log the originalUrl for debugging
+        originalUrl: originalUrl, // Log the originalUrl for debugging
+        thumbnailUrl: thumbnailUrl // Log the thumbnailUrl too
       });
       
       try {
-        // Process article using the appropriate processor
-        const processed = processArticle(originalUrl, article);
+        // Process article using the appropriate processor - pass thumbnailUrl
+        const processed = processArticle(originalUrl, article, thumbnailUrl);
         
         // Update state with processed results
         setProcessedContent(processed.processedContent);
@@ -75,7 +77,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
       }
     }
   // Ensure we always include both dependencies, even if one might be undefined initially
-  }, [article, originalUrl]);
+  }, [article, originalUrl, thumbnailUrl]);
 
   if (isLoading) {
     return (

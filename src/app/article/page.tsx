@@ -395,8 +395,8 @@ function ArticleContent() {
                 className="inline-flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 py-2"
               >
                 <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
                   className="h-4 w-4 mr-2" 
+                  xmlns="http://www.w3.org/2000/svg" 
                   fill="none" 
                   viewBox="0 0 24 24" 
                   stroke="currentColor"
@@ -412,43 +412,64 @@ function ArticleContent() {
               </Link>
               
               <div className="flex space-x-3">
-                {/* Debug button for Paul Graham articles */}
-                {url && url.includes('paulgraham.com') && (
-                  <button
-                    onClick={() => {
-                      if (article) {
-                        console.log('Article Content Length:', article.content.length);
-                        console.log('Article Text Content Length:', article.textContent.length);
-                        
-                        // Create a debugging element to show raw content
-                        const debugDiv = document.createElement('div');
-                        debugDiv.innerHTML = article.content;
-                        document.body.appendChild(debugDiv);
-                        
-                        // Add a style to make it visible
-                        debugDiv.style.position = 'fixed';
-                        debugDiv.style.top = '100px';
-                        debugDiv.style.right = '20px';
-                        debugDiv.style.width = '300px';
-                        debugDiv.style.height = '300px';
-                        debugDiv.style.overflow = 'auto';
-                        debugDiv.style.background = 'white';
-                        debugDiv.style.border = '1px solid black';
-                        debugDiv.style.padding = '10px';
-                        debugDiv.style.zIndex = '10000';
-                        
-                        // Add a close button
-                        const closeButton = document.createElement('button');
-                        closeButton.innerText = 'Close Debug';
-                        closeButton.style.marginBottom = '10px';
-                        closeButton.onclick = () => debugDiv.remove();
-                        debugDiv.insertBefore(closeButton, debugDiv.firstChild);
-                      }
-                    }}
-                    className="px-3 py-1 bg-red-100 text-red-600 rounded-md text-xs"
-                  >
-                    Debug Content
-                  </button>
+                {/* Debug buttons only shown in development */}
+                {process.env.NODE_ENV !== 'production' && (
+                  <>
+                    {/* Debug button for article thumbnails */}
+                    <button
+                      onClick={() => {
+                        console.log('Saved Article Details:', {
+                          exists: !!savedArticle,
+                          guid: savedArticle?.guid,
+                          title: savedArticle?.title,
+                          imageUrl: savedArticle?.imageUrl,
+                          url: url
+                        });
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md text-xs"
+                    >
+                      Debug Article
+                    </button>
+                    
+                    {/* Debug button for Paul Graham articles */}
+                    {url && url.includes('paulgraham.com') && (
+                      <button
+                        onClick={() => {
+                          if (article) {
+                            console.log('Article Content Length:', article.content.length);
+                            console.log('Article Text Content Length:', article.textContent.length);
+                            
+                            // Create a debugging element to show raw content
+                            const debugDiv = document.createElement('div');
+                            debugDiv.innerHTML = article.content;
+                            document.body.appendChild(debugDiv);
+                            
+                            // Add a style to make it visible
+                            debugDiv.style.position = 'fixed';
+                            debugDiv.style.top = '100px';
+                            debugDiv.style.right = '20px';
+                            debugDiv.style.width = '300px';
+                            debugDiv.style.height = '300px';
+                            debugDiv.style.overflow = 'auto';
+                            debugDiv.style.background = 'white';
+                            debugDiv.style.border = '1px solid black';
+                            debugDiv.style.padding = '10px';
+                            debugDiv.style.zIndex = '10000';
+                            
+                            // Add a close button
+                            const closeButton = document.createElement('button');
+                            closeButton.innerText = 'Close Debug';
+                            closeButton.style.marginBottom = '10px';
+                            closeButton.onclick = () => debugDiv.remove();
+                            debugDiv.insertBefore(closeButton, debugDiv.firstChild);
+                          }
+                        }}
+                        className="px-3 py-1 bg-red-100 text-red-600 rounded-md text-xs"
+                      >
+                        Debug Content
+                      </button>
+                    )}
+                  </>
                 )}
                 
                 {isSaved && (
@@ -487,7 +508,8 @@ function ArticleContent() {
             
             <ArticleReader 
               article={translatedArticle || article} 
-              originalUrl={url || ''}
+              originalUrl={url || undefined}
+              thumbnailUrl={savedArticle?.imageUrl} 
             />
           </>
         )}

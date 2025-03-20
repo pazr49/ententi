@@ -10,7 +10,8 @@ interface DebugInfoProps {
 export default function DebugInfo({ articles }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!articles || articles.length === 0) {
+  // Only show debug info in development environment
+  if (process.env.NODE_ENV === 'production' || !articles || articles.length === 0) {
     return null;
   }
 
