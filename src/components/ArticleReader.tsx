@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReadableArticle } from '@/utils/readability';
+import { processArticle } from '@/utils/articleProcessors';
 
 interface ArticleReaderProps {
   article: ReadableArticle;
@@ -13,10 +14,12 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
   const [processedContent, setProcessedContent] = useState<string>('');
   const [publishDate, setPublishDate] = useState<string | null>(null);
   const [isPaulGrahamArticle, setIsPaulGrahamArticle] = useState<boolean>(false);
+  const [authorImage, setAuthorImage] = useState<string | null>(null);
 
   // Reset processed content when article changes
   useEffect(() => {
     setProcessedContent('');
+    setAuthorImage(null);
   }, [article?.title]);
 
   // Set Paul Graham article flag based on URL
@@ -37,242 +40,20 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
       });
       
       try {
-        // Create a temporary DOM element to manipulate the HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = article.content;
+        // Process article using the appropriate processor
+        const processed = processArticle(originalUrl, article);
         
-        // Special handling for Paul Graham's articles
-        const isPaulGrahamArticlePage = originalUrl && originalUrl.includes('paulgraham.com');
-        if (isPaulGrahamArticlePage) {
-          console.log("Detected Paul Graham article, applying special processing");
-          
-          // Check for duplicated content - Paul Graham articles often have the article twice
-          // Look for repeated date markers like "September 2024" that might indicate duplication
-          const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-          
-          for (const month of monthNames) {
-            const regex = new RegExp(`${month}\\s+\\d{4}`, 'g');
-            const matches = tempDiv.innerHTML.match(regex);
-            
-            if (matches && matches.length > 1) {
-              console.log(`Detected duplicated content with date: ${matches[0]}`);
-              
-              // Find the first occurrence of the date
-              const parts = tempDiv.innerHTML.split(matches[0]);
-              if (parts.length > 1) {
-                // Get everything from the first occurrence of the date onwards
-                // This should give us just one copy of the article
-                const singleArticle = matches[0] + parts[1];
-                tempDiv.innerHTML = singleArticle;
-              }
-              break;
-            }
-          }
-          
-          // Check if the content already has a .footnote element
-          // If it does, the readability parser already extracted just the content portion
-          const footnoteElement = tempDiv.querySelector('.footnote');
-          if (footnoteElement) {
-            console.log("Found footnote element from parser, using that directly");
-            tempDiv.innerHTML = footnoteElement.innerHTML;
-          } else {
-            // STEP 1: Clean up navigation elements
-            // Remove vertical side navigation
-            const navImages = tempDiv.querySelectorAll('img[src*="bel-7.gif"], img[src*="bel-8.gif"]');
-            navImages.forEach(img => {
-              // Remove the entire paragraph containing the nav image
-              const parent = img.closest('p') || img.parentElement;
-              if (parent) {
-                parent.remove();
-              } else {
-                img.remove();
-              }
-            });
-            
-            // Remove image maps and usemaps
-            const usemapImages = tempDiv.querySelectorAll('img[usemap]');
-            usemapImages.forEach(img => {
-              const parent = img.closest('p') || img.parentElement;
-              if (parent) {
-                parent.remove();
-              } else {
-                img.remove();
-              }
-            });
-            
-            // Remove map elements
-            const maps = tempDiv.querySelectorAll('map');
-            maps.forEach(map => map.remove());
-            
-            // Handle additional navigation-like images
-            const allImages = tempDiv.querySelectorAll('img');
-            allImages.forEach(img => {
-              // Keep the title image but remove others that look like navigation
-              const isEssayTitleImage = img.src?.includes('paulgraham.com') && 
-                                    !img.src?.includes('bel-') && 
-                                    img.alt && 
-                                    img.width < 400;
-                                    
-              if (!isEssayTitleImage) {
-                // Check if it looks like a navigation image by its size or lack of alt text
-                if (!img.alt || img.width > 300 || img.src?.includes('index.html')) {
-                  const parent = img.closest('p') || img.parentElement;
-                  if (parent) {
-                    parent.remove();
-                  } else {
-                    img.remove();
-                  }
-                }
-              }
-            });
-            
-            // STEP 2: Try to identify the main content
-            // Find divs with substantial text that are likely to be the main content
-            const contentDivs = Array.from(tempDiv.querySelectorAll('div')).filter(div => {
-              const text = div.textContent || '';
-              // Content divs typically have substantial text
-              return text.length > 500 && text.split('.').length > 10;
-            });
-            
-            if (contentDivs.length === 1) {
-              // If we found exactly one significant content div, use that to replace all content
-              tempDiv.innerHTML = contentDivs[0].innerHTML;
-            }
-            
-            // STEP 3: Process paragraph formatting
-            // Paul Graham articles use <br><br> for paragraph breaks
-            const html = tempDiv.innerHTML;
-            
-            // Check for the common Paul Graham format pattern: text separated by double <br> tags
-            if (html.includes('<br><br>') || html.includes('<br /><br />')) {
-              console.log("Detected Paul Graham format with <br><br> paragraph separation");
-              
-              // Replace all variations of double br tags with paragraph markers
-              let processedHtml = html
-                .replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '</p><p>') // Replace double br with paragraph breaks
-                .replace(/<font[^>]*>(.*?)<\/font>/gi, '$1'); // Remove font tags but keep their content
-              
-              // Wrap the entire content in paragraphs if not already
-              if (!processedHtml.startsWith('<p>')) {
-                processedHtml = '<p>' + processedHtml;
-              }
-              if (!processedHtml.endsWith('</p>')) {
-                processedHtml = processedHtml + '</p>';
-              }
-              
-              // Update the div content
-              tempDiv.innerHTML = processedHtml;
-            }
-            
-            // STEP 4: Process divs that might contain text content not in paragraphs
-            const allDivs = tempDiv.querySelectorAll('div');
-            
-            if (allDivs.length > 0) {
-              // Process each div to ensure text is properly wrapped in paragraphs
-              allDivs.forEach(div => {
-                // Check if this is a text-only div without child elements
-                if (div.childNodes.length > 0 && div.querySelectorAll('p, h1, h2, h3, img, ul, ol').length === 0) {
-                  // Split text by double newlines and create paragraphs
-                  const text = div.innerHTML;
-                  if (text) {
-                    // Handle different types of line breaks
-                    let paragraphs = [];
-                    if (text.includes('\n\n')) {
-                      paragraphs = text.split('\n\n').filter(p => p.trim().length > 0);
-                    } else if (text.includes('\n')) {
-                      paragraphs = text.split('\n').filter(p => p.trim().length > 0);
-                    } else if (text.includes('<br><br>')) {
-                      paragraphs = text.split('<br><br>').filter(p => p.trim().length > 0);
-                    } else if (text.includes('<br />')) {
-                      paragraphs = text.split('<br />').filter(p => p.trim().length > 0);
-                    } else if (text.includes('<br>')) {
-                      paragraphs = text.split('<br>').filter(p => p.trim().length > 0);
-                    } else {
-                      // If no obvious paragraph breaks, check for sentences
-                      const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
-                      if (sentences.length > 3) {
-                        // Group sentences into paragraphs of 2-3 sentences
-                        for (let i = 0; i < sentences.length; i += 2) {
-                          const paraContent = sentences.slice(i, i + 2).join(' ');
-                          if (paraContent.trim().length > 0) {
-                            paragraphs.push(paraContent);
-                          }
-                        }
-                      } else {
-                        // Just use the whole text as one paragraph
-                        paragraphs = [text];
-                      }
-                    }
-                    
-                    if (paragraphs.length > 0) {
-                      div.innerHTML = paragraphs.map(p => {
-                        // Skip if it's just a line break
-                        if (p.trim() === '<br>' || p.trim() === '<br />') return '';
-                        // Skip if already has paragraph tags
-                        if (p.trim().startsWith('<p>') && p.trim().endsWith('</p>')) return p;
-                        return `<p>${p.trim()}</p>`;
-                      }).join('');
-                    }
-                  }
-                }
-              });
-            }
-            
-            // STEP 5: Process any remaining text not in paragraphs
-            if (tempDiv.innerHTML.includes('\n\n')) {
-              const text = tempDiv.innerHTML;
-              const paragraphs = text.split('\n\n').filter(p => p.trim().length > 0);
-              if (paragraphs.length > 1) {
-                tempDiv.innerHTML = paragraphs.map(p => {
-                  // Skip if already has HTML tags
-                  if (p.includes('<') && p.includes('>') && !p.includes('<br>')) return p;
-                  return `<p>${p.trim()}</p>`;
-                }).join('');
-              }
-            }
-            
-            // STEP 6: Final cleanup and formatting
-            // Remove any small images (like icons or spacers)
-            const smallImages = tempDiv.querySelectorAll('img[width="1"], img[height="1"], img[width="0"], img[height="0"]');
-            smallImages.forEach(img => img.remove());
-            
-            // Check for and remove any navigation at the very bottom which might be causing duplication
-            const allParagraphs = tempDiv.querySelectorAll('p');
-            const lastFewParagraphs = Array.from(allParagraphs).slice(-3); // Look at last 3 paragraphs
-            
-            lastFewParagraphs.forEach(p => {
-              // Check if this paragraph contains navigation images or links
-              const navImgs = p.querySelectorAll('img[src*="bel-"]');
-              const indexLinks = p.querySelectorAll('a[href*="index.html"]');
-              
-              if (navImgs.length > 0 || indexLinks.length > 0) {
-                // This is likely navigation at the bottom - remove it and everything after
-                let currentEl: Element | null = p;
-                while (currentEl) {
-                  const nextEl: Element | null = currentEl.nextElementSibling;
-                  currentEl.remove();
-                  currentEl = nextEl;
-                }
-              }
-            });
-            
-            // Process footnotes - typically they have numbers or asterisks in brackets
-            const allElements = tempDiv.querySelectorAll('*');
-            allElements.forEach(el => {
-              const text = el.textContent || '';
-              if (text.match(/\[\d+\]/) || text.match(/\[\*\]/) || text.match(/\[note \d+\]/i)) {
-                el.classList.add('footnote');
-                // Cast to HTMLElement to use style property
-                const htmlEl = el as HTMLElement;
-                htmlEl.style.fontSize = '0.9em';
-                htmlEl.style.color = '#555';
-              }
-            });
-          }
+        // Update state with processed results
+        setProcessedContent(processed.processedContent);
+        
+        if (processed.authorImage) {
+          setAuthorImage(processed.authorImage);
         }
         
-        // Extract and format publication date if available
-        if (article.publishedTime) {
+        if (processed.publishDate) {
+          setPublishDate(processed.publishDate);
+        } else if (article.publishedTime) {
+          // Fallback if the processor didn't set the date
           try {
             const date = new Date(article.publishedTime);
             setPublishDate(date.toLocaleDateString('en-US', {
@@ -288,232 +69,13 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
             setPublishDate(article.publishedTime);
           }
         }
-        
-        // Remove BBC gray placeholder images
-        const placeholderImages = tempDiv.querySelectorAll('img[src*="grey-placeholder"], img[src*="gray-placeholder"]');
-        placeholderImages.forEach(img => {
-          img.remove();
-        });
-        
-        // Remove reporter title elements
-        const bylineElements = tempDiv.querySelectorAll('[data-testid="byline-new-contributors"]');
-        bylineElements.forEach(element => {
-          element.remove();
-        });
-        
-        // Remove related article links
-        const relatedArticlesLists = tempDiv.querySelectorAll('ul');
-        relatedArticlesLists.forEach(list => {
-          // Check if this list contains links to other BBC articles
-          const links = list.querySelectorAll('a[href*="bbc.co.uk"]');
-          if (links.length > 0) {
-            list.remove();
-          }
-        });
-        
-        // Find all figcaption elements and style them
-        const captions = tempDiv.querySelectorAll('figcaption');
-        captions.forEach(caption => {
-          caption.classList.add('text-sm', 'text-gray-500', 'italic', 'mt-1', 'mb-6');
-        });
-        
-        // Find all figure elements and add margin
-        const figures = tempDiv.querySelectorAll('figure');
-        figures.forEach(figure => {
-          figure.classList.add('my-6');
-          
-          // Check if this figure contains a placeholder image and remove it if found
-          const placeholders = figure.querySelectorAll('img[src*="placeholder"]');
-          placeholders.forEach(img => {
-            img.remove();
-          });
-          
-          // Handle image source attribution
-          const sourceSpan = figure.querySelector('span');
-          const image = figure.querySelector('img');
-          
-          if (sourceSpan && image && sourceSpan.textContent) {
-            // Create a wrapper for the image to allow positioning the source
-            const wrapper = document.createElement('div');
-            wrapper.className = 'image-wrapper';
-            wrapper.style.position = 'relative';
-            wrapper.style.display = 'block';
-            wrapper.style.width = '100%';
-            
-            // Move the image into the wrapper
-            image.parentNode?.insertBefore(wrapper, image);
-            wrapper.appendChild(image);
-            
-            // Create a styled attribution element
-            const attribution = document.createElement('div');
-            attribution.className = 'image-attribution';
-            attribution.textContent = sourceSpan.textContent;
-            attribution.style.position = 'absolute';
-            attribution.style.bottom = '8px';
-            attribution.style.right = '8px';
-            attribution.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            attribution.style.color = 'white';
-            attribution.style.padding = '2px 6px';
-            attribution.style.borderRadius = '3px';
-            attribution.style.fontSize = '0.75rem';
-            
-            // Add the attribution to the wrapper
-            wrapper.appendChild(attribution);
-            
-            // Remove the original span
-            sourceSpan.remove();
-          }
-        });
-        
-        // Clean up author information at the top
-        // Find and remove time elements that might be duplicated in the content
-        const timeElements = tempDiv.querySelectorAll('time');
-        timeElements.forEach(timeEl => {
-          const parent = timeEl.parentNode;
-          if (parent && parent.nodeType === Node.ELEMENT_NODE) {
-            const parentElement = parent as Element;
-            if (parentElement.childNodes.length <= 3) {
-              parentElement.remove();
-            }
-          }
-        });
-        
-        // Extract author name and title from byline if available
-        let authorName = article.byline || '';
-        
-        if (authorName.includes(',')) {
-          const parts = authorName.split(',');
-          authorName = parts[0].trim();
-        }
-        
-        // Remove author information that will be displayed separately
-        const possibleAuthorParagraphs = Array.from(tempDiv.querySelectorAll('p')).slice(0, 5);
-        possibleAuthorParagraphs.forEach(p => {
-          const text = p.textContent || '';
-          
-          // Check if paragraph contains author information
-          if (text.includes('By ') || 
-              text.includes('Reporter') || 
-              text.includes('Editor') ||
-              text.includes('Correspondent') ||
-              (authorName && text.includes(authorName))) {
-            p.remove();
-          }
-        });
-        
-        // Apply additional styling to paragraphs
-        const paragraphs = tempDiv.querySelectorAll('p');
-        paragraphs.forEach(paragraph => {
-          paragraph.classList.add('mb-4');
-          
-          // Check if paragraph contains only a placeholder image and remove it
-          const placeholderInParagraph = paragraph.querySelector('img[src*="placeholder"]');
-          if (placeholderInParagraph && paragraph.textContent?.trim() === '') {
-            paragraph.remove();
-            return;
-          }
-          
-          // Handle image source attribution in paragraphs
-          const sourceSpan = paragraph.querySelector('span');
-          const image = paragraph.querySelector('img');
-          
-          if (sourceSpan && image && sourceSpan.textContent && paragraph.childNodes.length <= 3) {
-            // Create a wrapper for the image to allow positioning the source
-            const wrapper = document.createElement('div');
-            wrapper.className = 'image-wrapper';
-            wrapper.style.position = 'relative';
-            wrapper.style.display = 'block';
-            wrapper.style.width = '100%';
-            wrapper.style.marginBottom = '1rem';
-            
-            // Move the image into the wrapper
-            image.parentNode?.insertBefore(wrapper, image);
-            wrapper.appendChild(image);
-            
-            // Create a styled attribution element
-            const attribution = document.createElement('div');
-            attribution.className = 'image-attribution';
-            attribution.textContent = sourceSpan.textContent;
-            attribution.style.position = 'absolute';
-            attribution.style.bottom = '8px';
-            attribution.style.right = '8px';
-            attribution.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            attribution.style.color = 'white';
-            attribution.style.padding = '2px 6px';
-            attribution.style.borderRadius = '3px';
-            attribution.style.fontSize = '0.75rem';
-            
-            // Add the attribution to the wrapper
-            wrapper.appendChild(attribution);
-            
-            // Remove the original span
-            sourceSpan.remove();
-            
-            // If paragraph now only contains whitespace, remove it
-            if (paragraph.textContent?.trim() === '') {
-              paragraph.parentNode?.insertBefore(wrapper, paragraph);
-              paragraph.remove();
-            }
-          }
-        });
-        
-        // Apply styling to remaining images
-        const images = tempDiv.querySelectorAll('img');
-        images.forEach(image => {
-          // Skip placeholder images
-          if (image.src.includes('placeholder')) {
-            return;
-          }
-          
-          image.classList.add('mx-auto', 'rounded-md');
-          // Make sure images don't overflow their container
-          image.style.maxWidth = '100%';
-          image.style.height = 'auto';
-          
-          // Check for standalone images with adjacent spans (source attribution)
-          const nextSibling = image.nextSibling;
-          const parent = image.parentNode;
-          
-          if (nextSibling && nextSibling.nodeName === 'SPAN' && nextSibling.textContent && 
-              parent && parent.childNodes.length <= 3) {
-            // Create a wrapper for the image to allow positioning the source
-            const wrapper = document.createElement('div');
-            wrapper.className = 'image-wrapper';
-            wrapper.style.position = 'relative';
-            wrapper.style.display = 'block';
-            wrapper.style.width = '100%';
-            
-            // Move the image into the wrapper
-            parent.insertBefore(wrapper, image);
-            wrapper.appendChild(image);
-            
-            // Create a styled attribution element
-            const attribution = document.createElement('div');
-            attribution.className = 'image-attribution';
-            attribution.textContent = nextSibling.textContent;
-            attribution.style.position = 'absolute';
-            attribution.style.bottom = '8px';
-            attribution.style.right = '8px';
-            attribution.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            attribution.style.color = 'white';
-            attribution.style.padding = '2px 6px';
-            attribution.style.borderRadius = '3px';
-            attribution.style.fontSize = '0.75rem';
-            
-            // Add the attribution to the wrapper
-            wrapper.appendChild(attribution);
-            
-            // Remove the original span
-            nextSibling.remove();
-          }
-        });
-        
-        setProcessedContent(tempDiv.innerHTML);
       } catch (e) {
         console.error('Error processing article content:', e);
+        setProcessedContent(article.content);
       }
     }
-  }, [article]);
+  // Ensure we always include both dependencies, even if one might be undefined initially
+  }, [article, originalUrl]);
 
   if (isLoading) {
     return (
@@ -562,7 +124,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
   }
 
   return (
-    <div className={`max-w-3xl mx-auto ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200`}>
+    <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200`}>
       <div className="sticky top-0 z-10 flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-800 bg-inherit backdrop-blur-sm bg-white/90 dark:bg-gray-900/90">
         <div className="flex space-x-3">
           <button
@@ -622,6 +184,31 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
               </svg>
             )}
           </button>
+          {originalUrl && (
+            <a
+              href={originalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="View original article"
+              title="View original article"
+            >
+              <svg 
+                className="w-5 h-5 text-gray-600 dark:text-gray-300" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" 
+                />
+              </svg>
+            </a>
+          )}
         </div>
       </div>
 
@@ -633,21 +220,29 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
             <div className="flex flex-col space-y-3">
               {authorName && (
                 <div className="flex items-center">
-                  <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center mr-3 text-indigo-600 dark:text-indigo-300">
-                    <svg 
-                      className="w-4 h-4" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24" 
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+                  <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center mr-3 text-indigo-600 dark:text-indigo-300 overflow-hidden">
+                    {authorImage ? (
+                      <img 
+                        src={authorImage} 
+                        alt={authorName} 
+                        className="w-full h-full object-cover"
                       />
-                    </svg>
+                    ) : (
+                      <svg 
+                        className="w-4 h-4" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24" 
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+                        />
+                      </svg>
+                    )}
                   </div>
                   <div>
                     <p className="font-medium">{authorName}</p>
@@ -951,4 +546,4 @@ export default function ArticleReader({ article, isLoading = false, originalUrl 
       </div>
     </div>
   );
-} 
+}

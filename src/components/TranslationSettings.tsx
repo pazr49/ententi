@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getUserPreferences, saveUserPreferences as savePrefs } from '../utils/userPreferences';
 
 interface TranslationSettingsProps {
   onTranslate: (language: string, readingAge: string, region?: string) => Promise<void>;
@@ -22,6 +23,7 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
   const [region, setRegion] = useState<string>('');
   const [availableRegions, setAvailableRegions] = useState<{ code: string; name: string }[]>([]);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(false);
 
   // Updated language options with regions
   const languages: LanguageOption[] = [
@@ -83,24 +85,73 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
     { value: 'advanced', label: 'Advanced' } // 16+ years old
   ];
 
+  // Fetch user preferences on component mount
+  useEffect(() => {
+    const fetchPreferences = async () => {
+      try {
+        const preferences = await getUserPreferences();
+        
+        if (preferences) {
+          // Set preferences if they exist
+          if (preferences.language) setTargetLanguage(preferences.language);
+          if (preferences.reading_level) setReadingAge(preferences.reading_level);
+          if (preferences.region) setRegion(preferences.region);
+        }
+        
+        setPreferencesLoaded(true);
+      } catch (error) {
+        console.error('Error fetching user preferences:', error);
+        setPreferencesLoaded(true);
+      }
+    };
+
+    fetchPreferences();
+  }, []);
+
   // Update available regions when language changes
   useEffect(() => {
-    if (targetLanguage) {
-      const selectedLanguage = languages.find(lang => lang.code === targetLanguage);
-      if (selectedLanguage && selectedLanguage.regions) {
-        setAvailableRegions(selectedLanguage.regions);
-        setRegion(selectedLanguage.regions[0].code); // Set default to first region (usually the origin country)
-      } else {
-        setAvailableRegions([]);
-        setRegion('');
-      }
-    } else {
+    if (!targetLanguage) {
       setAvailableRegions([]);
-      setRegion('');
+      if (region) setRegion('');
+      return;
     }
-  }, [targetLanguage]);
+    
+    const selectedLanguage = languages.find(lang => lang.code === targetLanguage);
+    if (!selectedLanguage || !selectedLanguage.regions) {
+      setAvailableRegions([]);
+      if (region) setRegion('');
+      return;
+    }
+    
+    setAvailableRegions(selectedLanguage.regions);
+    
+    // Only set default region if:
+    // 1. Preferences are loaded (to avoid conflicts with the first useEffect)
+    // 2. Current region is empty OR not valid for the selected language
+    if (preferencesLoaded) {
+      const isCurrentRegionValid = selectedLanguage.regions.some(r => r.code === region);
+      if (!region || !isCurrentRegionValid) {
+        setRegion(selectedLanguage.regions[0].code);
+      }
+    }
+  }, [targetLanguage, preferencesLoaded]); // Removed region from dependency array to prevent loops
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Save user preferences
+  const saveUserPreferences = async () => {
+    if (!targetLanguage || !readingAge) return;
+    
+    try {
+      await savePrefs({
+        language: targetLanguage,
+        reading_level: readingAge,
+        region: region || undefined
+      });
+    } catch (error) {
+      console.error('Error saving user preferences:', error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (targetLanguage && readingAge) {
       // Map reading levels to age ranges for the LLM prompt
@@ -108,6 +159,9 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
       if (readingAge === 'beginner') readingAgeValue = 'elementary'; // 8-11 years
       if (readingAge === 'intermediate') readingAgeValue = 'middle'; // 12-15 years
       if (readingAge === 'advanced') readingAgeValue = 'high'; // 16+ years
+      
+      // Save user preferences when they submit the form
+      await saveUserPreferences();
       
       onTranslate(targetLanguage, readingAgeValue, region);
     }
@@ -118,10 +172,10 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
   };
 
   return (
-    <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden transition-all">
+    <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden transition-all px-4 py-4">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 flex justify-between items-center text-left bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+        className="w-full px-4 py-3 flex justify-between items-center text-left bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors rounded-md"
         aria-expanded={isExpanded}
         aria-controls="translation-settings-panel"
       >
@@ -160,11 +214,11 @@ export default function TranslationSettings({ onTranslate, isTranslating }: Tran
       
       <div 
         id="translation-settings-panel"
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${
+        className={`transition-all duration-300 ease-in-out overflow-hidden mt-4 ${
           isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
-        <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-md">
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
             Translate this article to your preferred language and adapt it to your reading level using AI.
           </p>

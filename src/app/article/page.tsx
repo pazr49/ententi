@@ -322,7 +322,7 @@ function ArticleContent() {
   // Display a loading indicator while article data is being fetched
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 pt-16 md:pt-20">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
         <p className="text-gray-500 dark:text-gray-400">Loading article...</p>
       </div>
@@ -332,7 +332,7 @@ function ArticleContent() {
   // Display an error message if something went wrong
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 pt-16 md:pt-20">
         <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-2xl w-full">
           <h2 className="text-red-700 dark:text-red-400 text-lg font-semibold mb-3">Error Loading Article</h2>
           <p className="text-gray-700 dark:text-gray-300 mb-6">{error}</p>
@@ -358,7 +358,7 @@ function ArticleContent() {
   // If no article data is available, suggest browsing saved articles
   if (!article) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 pt-16 md:pt-20">
         <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-lg max-w-2xl w-full">
           <h2 className="text-indigo-700 dark:text-indigo-400 text-lg font-semibold mb-3">No Article Selected</h2>
           <p className="text-gray-700 dark:text-gray-300 mb-6">
@@ -385,14 +385,14 @@ function ArticleContent() {
 
   // If article data is available, render the ArticleReader and TranslationSettings
   return (
-    <div className="article-page-container">
+    <div className="article-page-container max-w-3xl mx-auto pt-16 md:pt-20">
       <div className="article-page-content">
         {article && (
           <>
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-6 px-4 py-2 flex items-center justify-between">
               <Link 
                 href={savedArticle ? "/saved" : "/"} 
-                className="inline-flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+                className="inline-flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 py-2"
               >
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -455,7 +455,7 @@ function ArticleContent() {
                   <button
                     onClick={handleRemoveArticle}
                     disabled={isRemoving}
-                    className="inline-flex items-center text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                    className="inline-flex items-center text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 py-2"
                   >
                     {isRemoving ? (
                       <span className="inline-flex items-center">
@@ -500,7 +500,7 @@ function ArticleContent() {
 export default function ArticlePage() {
   return (
     <Suspense fallback={
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 pt-16 md:pt-20">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
         <p className="text-gray-500 dark:text-gray-400">Loading article page...</p>
       </div>
