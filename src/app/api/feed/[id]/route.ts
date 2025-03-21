@@ -3,8 +3,9 @@ import { fetchSingleRssFeed } from '@/utils/rss';
 import { getFeedById } from '@/utils/feedConfig';
 import { scrapeColombiaOne } from '@/utils/articleProcessors/colombiaOneScraper';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(request: NextRequest) {
+  // Extract ID from the URL path
+  const id = request.nextUrl.pathname.split('/').pop();
   
   if (!id) {
     return NextResponse.json(
