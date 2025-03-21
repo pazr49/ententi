@@ -4,6 +4,7 @@ import { getFeedById, getAllFeedIds } from '@/utils/feedConfig';
 import ArticleList from '@/components/ArticleList';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { scrapeColombiaOne } from '@/utils/articleProcessors/colombiaOneScraper';
 
 // Generate static paths for all feeds
 export function generateStaticParams() {
@@ -24,7 +25,13 @@ async function FeedContent({ feedId }: { feedId: string }) {
     notFound();
   }
   
-  const feed = await fetchSingleRssFeed(feedConfig);
+  // Handle custom processors
+  let feed;
+  if (feedConfig.customProcessor && feedId === 'colombia-one') {
+    feed = await scrapeColombiaOne(feedConfig.url);
+  } else {
+    feed = await fetchSingleRssFeed(feedConfig);
+  }
   
   return (
     <div className="feed-container">

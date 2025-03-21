@@ -45,9 +45,6 @@ interface TranslationResponse {
 
 // Map reading age to a more descriptive format for the AI
 const readingAgeMap: Record<string, string> = {
-  "elementary": "elementary school level (8-11 years old)",
-  "middle": "middle school level (12-15 years old)",
-  "high": "high school level (16+ years old)",
   "beginner": "elementary school level (8-11 years old)",
   "intermediate": "middle school level (12-15 years old)",
   "advanced": "high school level (16+ years old)"
@@ -64,7 +61,8 @@ const languageMap: Record<string, string> = {
   "ja": "Japanese",
   "ko": "Korean",
   "ru": "Russian",
-  "ar": "Arabic"
+  "ar": "Arabic",
+  "en": "English"
 };
 
 // Map of language regions to their dialect descriptions

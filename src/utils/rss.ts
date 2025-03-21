@@ -1,5 +1,6 @@
 import Parser from 'rss-parser';
 import { FeedConfig } from './feedConfig';
+import { scrapeColombiaOne } from './articleProcessors/colombiaOneScraper';
 
 export interface FeedItem {
   title: string;
@@ -323,7 +324,19 @@ export async function fetchMultipleFeeds(feedConfigs: FeedConfig[]): Promise<Fee
     return [];
   }
   
-  const feedPromises = validConfigs.map(config => fetchSingleRssFeed(config));
+  const feedPromises = validConfigs.map(config => {
+    // Use custom processor for Colombia One
+    if (config.customProcessor) {
+      if (config.id === 'colombia-one') {
+        return scrapeColombiaOne(config.url);
+      }
+      // Add more custom processors here as needed
+      console.warn(`Custom processor requested for ${config.id} but no processor found`);
+    }
+    
+    // Default to standard RSS parser
+    return fetchSingleRssFeed(config);
+  });
   
   try {
     // Using Promise.allSettled to ensure all promises complete, even if some fail

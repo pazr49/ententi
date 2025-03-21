@@ -4,6 +4,7 @@ export interface FeedConfig {
   url: string;
   description: string;
   logoUrl?: string;
+  customProcessor?: boolean; // Flag for feeds that use custom processors instead of RSS
 }
 
 // List of all available feeds
@@ -28,6 +29,28 @@ export const feeds: FeedConfig[] = [
     url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
     description: 'World news from The New York Times',
     logoUrl: 'https://static01.nyt.com/images/misc/NYT_logo_rss_250x40.png'
+  },
+  {
+    id: 'techcrunch-startups',
+    name: 'TechCrunch Startups',
+    url: 'https://techcrunch.com/category/startups/feed/',
+    description: 'Startup news, funding announcements, and innovation stories from TechCrunch',
+    logoUrl: 'https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png'
+  },
+  {
+    id: 'techcrunch-ai',
+    name: 'TechCrunch AI',
+    url: 'https://techcrunch.com/category/artificial-intelligence/feed/',
+    description: 'Artificial intelligence news and developments from TechCrunch',
+    logoUrl: 'https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png'
+  },
+  {
+    id: 'colombia-one',
+    name: 'Colombia One',
+    url: 'https://colombiaone.com/culture/',
+    description: 'News and stories from Colombia One',
+    logoUrl: 'https://colombiaone.com/wp-content/uploads/2023/08/Co1ombia-one-1.png',
+    customProcessor: true // Flag that this feed uses a custom processor
   }
 ];
 
