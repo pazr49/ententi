@@ -61,8 +61,7 @@ const languageMap: Record<string, string> = {
   "ja": "Japanese",
   "ko": "Korean",
   "ru": "Russian",
-  "ar": "Arabic",
-  "en": "English"
+  "ar": "Arabic"
 };
 
 // Map of language regions to their dialect descriptions
