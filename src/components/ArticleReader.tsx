@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ReadableArticle } from '@/utils/readability';
 import { processArticle } from '@/utils/articleProcessors';
+import WordPopup, { PopupPosition } from './WordPopup';
+import { useEnhancedContent } from '@/hooks/useEnhancedContent';
 
 interface ArticleReaderProps {
   article: ReadableArticle;
@@ -16,6 +18,10 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [publishDate, setPublishDate] = useState<string | null>(null);
   const [isPaulGrahamArticle, setIsPaulGrahamArticle] = useState<boolean>(false);
   const [authorImage, setAuthorImage] = useState<string | null>(null);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [popupPosition, setPopupPosition] = useState<PopupPosition | null>(null);
+  const [currentSentence, setCurrentSentence] = useState<string>('');
+  const articleContentRef = useRef<HTMLDivElement>(null);
 
   // Reset processed content when article changes
   useEffect(() => {
@@ -33,29 +39,21 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   // Process the article content to add custom styling
   useEffect(() => {
     if (article && article.content) {
-      // Log for debugging
       console.log("Processing article content in ArticleReader", { 
         title: article.title,
         contentLength: article.content.length,
-        originalUrl: originalUrl, // Log the originalUrl for debugging
-        thumbnailUrl: thumbnailUrl // Log the thumbnailUrl too
+        originalUrl: originalUrl,
+        thumbnailUrl: thumbnailUrl
       });
-      
       try {
-        // Process article using the appropriate processor - pass thumbnailUrl
         const processed = processArticle(originalUrl, article, thumbnailUrl);
-        
-        // Update state with processed results
         setProcessedContent(processed.processedContent);
-        
         if (processed.authorImage) {
           setAuthorImage(processed.authorImage);
         }
-        
         if (processed.publishDate) {
           setPublishDate(processed.publishDate);
         } else if (article.publishedTime) {
-          // Fallback if the processor didn't set the date
           try {
             const date = new Date(article.publishedTime);
             setPublishDate(date.toLocaleDateString('en-US', {
@@ -76,8 +74,102 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
         setProcessedContent(article.content);
       }
     }
-  // Ensure we always include both dependencies, even if one might be undefined initially
   }, [article, originalUrl, thumbnailUrl]);
+
+  // Use custom hook to get enhanced content by wrapping words in spans
+  const enhancedContentMemo = useEnhancedContent(processedContent);
+
+  // Extract the sentence containing the target word
+  const extractSentence = (element: HTMLElement, targetWord: string): string => {
+    // Find the parent paragraph or similar container
+    let container = element;
+    
+    // Walk up the DOM to find a paragraph or similar container
+    while (
+      container && 
+      !['P', 'DIV', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(container.tagName)
+    ) {
+      container = container.parentElement as HTMLElement;
+    }
+    
+    if (!container) {
+      return targetWord; // Fallback to just the word if no container found
+    }
+    
+    // Get the text content of the container
+    const text = container.textContent || '';
+    
+    // Split text into sentences using regex that handles various end-of-sentence punctuation
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    
+    // Find the sentence containing the target word
+    for (const sentence of sentences) {
+      // Use word boundary to find the exact word match
+      const wordRegex = new RegExp(`\\b${targetWord}\\b`, 'i');
+      if (wordRegex.test(sentence)) {
+        return sentence.trim();
+      }
+    }
+    
+    // If no sentence was found, return a portion of text around the word as fallback
+    const wordIndex = text.indexOf(targetWord);
+    if (wordIndex !== -1) {
+      // Extract text before and after the word (about 50 chars each direction)
+      const start = Math.max(0, wordIndex - 50);
+      const end = Math.min(text.length, wordIndex + targetWord.length + 50);
+      return text.substring(start, end).trim();
+    }
+    
+    return targetWord; // Last resort fallback
+  };
+
+  // Handle document clicks (for closing popup when clicking outside)
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!articleContentRef.current?.contains(target) && !target.closest('.word-popup') && selectedWord) {
+        setSelectedWord(null);
+        setPopupPosition(null);
+        setCurrentSentence('');
+      }
+    };
+    document.addEventListener('click', handleDocumentClick);
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+    };
+  }, [selectedWord]);
+
+  // Handle word click with improved behavior for switching between words
+  const handleWordClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('article-word')) {
+      e.stopPropagation();
+      const word = target.textContent || '';
+      const wordRect = target.getBoundingClientRect();
+      
+      // If clicking the same word that's already selected, do nothing
+      if (selectedWord === word) {
+        return;
+      }
+      
+      // Extract the sentence containing this word
+      const sentence = extractSentence(target, word);
+      
+      if (articleContentRef.current) {
+        const containerRect = articleContentRef.current.getBoundingClientRect();
+        setSelectedWord(word);
+        setCurrentSentence(sentence);
+        setPopupPosition({
+          x: wordRect.left - containerRect.left + wordRect.width / 2,
+          y: wordRect.top - containerRect.top
+        });
+      }
+    } else if (!target.closest('.word-popup') && selectedWord) {
+      setSelectedWord(null);
+      setPopupPosition(null);
+      setCurrentSentence('');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -297,10 +389,20 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           )}
         </div>
         
-        <div 
-          className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
-          dangerouslySetInnerHTML={{ __html: processedContent || article.content }}
-        />
+        <div className="relative" ref={articleContentRef}>
+          <div 
+            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
+            dangerouslySetInnerHTML={{ __html: enhancedContentMemo || processedContent || article.content }}
+            onClick={handleWordClick}
+          />
+          {selectedWord && popupPosition && (
+            <WordPopup 
+              word={selectedWord}
+              position={popupPosition}
+              sentence={currentSentence}
+            />
+          )}
+        </div>
         
         {/* Fallback content display if the article isn't rendering */}
         {isPaulGrahamArticle && !processedContent && (
@@ -360,189 +462,77 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           .article-content a {
             color: ${isDarkMode ? '#93c5fd' : '#3b82f6'};
             text-decoration: none;
-            border-bottom: 1px solid ${isDarkMode ? 'rgba(147, 197, 253, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
+            border-bottom: 1px solid ${isDarkMode ? 'rgba(147, 197, 253, 0.2)' : 'rgba(59, 130, 246, 0.2)'};
             transition: border-color 0.2s ease;
           }
           
           .article-content a:hover {
-            border-bottom-color: ${isDarkMode ? 'rgba(147, 197, 253, 0.8)' : 'rgba(59, 130, 246, 0.8)'};
+            border-color: ${isDarkMode ? 'rgba(147, 197, 253, 0.4)' : 'rgba(59, 130, 246, 0.4)'};
           }
           
           .article-content blockquote {
-            border-left: 3px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'};
-            padding-left: 1.25rem;
-            font-style: italic;
             margin: 1.5rem 0;
-            color: ${isDarkMode ? '#9ca3af' : '#4b5563'};
+            padding-left: 1.25rem;
+            border-left: 3px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'};
+            color: ${isDarkMode ? '#d1d5db' : '#4b5563'};
+            font-style: italic;
+          }
+          
+          .article-content pre {
+            background-color: ${isDarkMode ? '#1f2937' : '#f3f4f6'};
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+          }
+          
+          .article-content code {
+            background-color: ${isDarkMode ? '#1f2937' : '#f3f4f6'};
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.875em;
           }
           
           .article-content ul, .article-content ol {
-            padding-left: 1.5rem;
             margin: 1.25rem 0;
+            padding-left: 1.25rem;
           }
           
           .article-content li {
             margin-bottom: 0.5rem;
-            line-height: 1.7;
           }
           
-          .article-content .image-wrapper {
-            position: relative;
-            display: block;
-            width: 100%;
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            border-radius: 0.5rem;
+          .article-content ul li {
+            list-style-type: disc;
           }
           
-          .article-content .image-attribution {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            z-index: 10;
-            backdrop-filter: blur(4px);
+          .article-content ol li {
+            list-style-type: decimal;
           }
           
-          /* Add styles specifically for Paul Graham's articles */
-          .article-content {
-            position: relative;
-            z-index: 1;
-          }
-          
-          /* Override any problematic styles that might come from the original page */
-          .article-content div {
-            position: static !important;
-            display: block !important;
-            width: auto !important;
-            max-width: 100% !important;
-          }
-          
-          /* Special styling for Paul Graham articles */
+          /* Paul Graham specific styling */
           .pg-article {
-            font-family: Georgia, 'Times New Roman', serif !important;
-            font-size: ${fontSize === 'text-base' ? '1.125rem' : fontSize === 'text-lg' ? '1.25rem' : '1.375rem'} !important;
-            max-width: 40rem !important;
-            margin: 0 auto !important;
-            padding: 0 1rem !important;
-            line-height: 1.9 !important;
+            font-family: Verdana, sans-serif;
           }
           
-          /* Force text to be visible and properly sized */
-          .pg-article * {
-            color: ${isDarkMode ? '#f3f4f6 !important' : '#111827 !important'};
-            background-color: transparent !important;
-            font-family: inherit !important;
-          }
-          
-          /* Make sure all content is shown as block elements with spacing */
-          .pg-article div, .pg-article p {
-            display: block !important;
-            position: static !important;
-            margin-bottom: 1.5rem !important;
-            line-height: 1.8 !important;
-            font-size: ${fontSize === 'text-base' ? '1.125rem' : fontSize === 'text-lg' ? '1.25rem' : '1.375rem'} !important;
-          }
-          
-          /* Fix any width issues */
-          .pg-article table, .pg-article tr, .pg-article td {
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            border: none !important;
-          }
-          
-          /* Remove any fixed positioning */
-          .pg-article * {
-            position: static !important;
-            width: auto !important;
-            max-width: 100% !important;
-          }
-          
-          /* Add specific styling for Paul Graham paragraphs */
           .pg-article p {
-            margin-bottom: 2rem !important; /* Increase spacing between paragraphs */
-            line-height: 1.8 !important;
-            max-width: 42rem !important; /* Control line length for readability */
-            font-family: Georgia, serif !important; /* Use a serif font similar to his website */
-            text-align: left !important;
-            padding: 0 !important;
-            text-indent: 0 !important; /* Ensure no text indentation */
-            letter-spacing: -0.003em !important; /* Slight letter spacing adjustment */
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
           }
           
-          /* Ensure first paragraph is properly styled */
-          .pg-article p:first-of-type {
-            margin-top: 1.5rem !important;
+          /* Styling for individual word interactions */
+          .article-word {
+            cursor: pointer;
+            border-radius: 2px;
+            transition: background-color 0.15s ease;
+            padding: 0 1px;
+            display: inline-block;
           }
           
-          /* Style for the month/year heading typically found at the top of PG essays */
-          .pg-article > div:first-child,
-          .pg-article > font:first-child,
-          .pg-article > p:first-of-type:has(font) {
-            font-size: 1rem !important;
-            color: ${isDarkMode ? '#9ca3af !important' : '#4b5563 !important'};
-            margin-bottom: 1.5rem !important;
-            font-style: italic !important;
-          }
-          
-          /* Paul Graham's signature style for the article body */
-          .pg-article {
-            position: relative !important;
-            padding-top: 1.5rem !important;
-            padding-bottom: 3rem !important;
-          }
-          
-          /* Remove any unnecessary margins and paddings that might disrupt spacing */
-          .pg-article div, 
-          .pg-article span {
-            margin: 0 !important; 
-            padding: 0 !important;
-          }
-          
-          /* Give proper contrast in dark mode */
-          .pg-article {
-            background-color: ${isDarkMode ? '#111827 !important' : 'transparent !important'};
-          }
-          
-          /* Ensure consistent font size regardless of nesting */
-          .pg-article *:not(h1):not(h2):not(h3):not(h4):not(.footnote) {
-            font-size: ${fontSize === 'text-base' ? '1.125rem !important' : fontSize === 'text-lg' ? '1.25rem !important' : '1.375rem !important'};
-          }
-          
-          /* Style text directly inside divs (common in PG articles) */
-          .pg-article div > br + text,
-          .pg-article div > text {
-            display: block !important;
-            margin-bottom: 1.5rem !important;
-            font-size: ${fontSize === 'text-base' ? '1.125rem' : fontSize === 'text-lg' ? '1.25rem' : '1.375rem'} !important;
-          }
-          
-          /* Ensure headers stand out */
-          .pg-article h1, .pg-article h2, .pg-article h3 {
-            margin-top: 2.5rem !important;
-            margin-bottom: 1.5rem !important;
-            font-weight: 700 !important;
-            line-height: 1.3 !important;
-          }
-          
-          /* Style footnotes */
-          .pg-article .footnote {
-            font-size: 0.9em !important;
-            color: ${isDarkMode ? '#9ca3af !important' : '#555 !important'};
-            margin-top: 1.5rem !important;
-          }
-          
-          /* Handle links in Paul Graham's articles */
-          .pg-article a {
-            color: ${isDarkMode ? '#93c5fd !important' : '#3b82f6 !important'};
-            text-decoration: underline !important;
-            border-bottom: none !important;
+          .article-word:hover {
+            background-color: ${isDarkMode ? 'rgba(147, 197, 253, 0.3)' : 'rgba(59, 130, 246, 0.15)'};
+            border-radius: 3px;
           }
         `}</style>
       </div>
