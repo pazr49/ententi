@@ -50,6 +50,38 @@ export const bbcProcessor: ArticleProcessor = {
     const promoElements = tempDiv.querySelectorAll('[data-component="links-block"], [data-component="tag-list"], [data-component="see-alsos"]');
     promoElements.forEach(el => el.remove());
     
+    // Remove BBC byline blocks and related elements
+    const bylineElements = tempDiv.querySelectorAll(
+      '[data-testid="byline-new"], ' +
+      '[data-component="byline-block"], ' +
+      '[data-testid="byline-new-contributors"], ' +
+      '.byline, ' +
+      '.byline-block, ' +
+      '.article__byline, ' +
+      'time, ' + 
+      'datetime, ' +
+      '.article-info, ' +
+      '.author-info, ' +
+      '.published-date'
+    );
+    bylineElements.forEach(el => el.remove());
+    
+    // Remove specific mention of "BBC" in spans
+    const allSpans = tempDiv.querySelectorAll('span');
+    allSpans.forEach(span => {
+      if (span.textContent?.trim() === 'BBC' || span.classList.contains('article-word')) {
+        // Check if this is a BBC identifier or author-related span
+        if (
+          span.textContent?.trim() === 'BBC' || 
+          span.textContent?.includes('Presenter') ||
+          span.textContent?.includes('Reporter') ||
+          span.parentElement?.textContent?.includes('hours ago')
+        ) {
+          span.remove();
+        }
+      }
+    });
+    
     // Check if we need to add the hero image
     // First try to find if there's already a large image at the beginning of the content
     let hasHeroImage = false;

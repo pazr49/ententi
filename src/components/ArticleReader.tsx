@@ -3,6 +3,7 @@ import { ReadableArticle } from '@/utils/readability';
 import { processArticle } from '@/utils/articleProcessors';
 import WordPopup, { PopupPosition } from './WordPopup';
 import { useEnhancedContent } from '@/hooks/useEnhancedContent';
+import { useTTS } from '@/hooks/useTTS';
 
 interface ArticleReaderProps {
   article: ReadableArticle;
@@ -22,21 +23,36 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [popupPosition, setPopupPosition] = useState<PopupPosition | null>(null);
   const [currentSentence, setCurrentSentence] = useState<string>('');
   const articleContentRef = useRef<HTMLDivElement>(null);
+  
+  const {
+    isLoading: isTTSLoading,
+    isPlaying,
+    error: ttsError,
+    play: playTTS,
+    pause: pauseTTS,
+    progress: ttsProgress,
+    duration: ttsDuration,
+    currentTime: ttsCurrentTime,
+    seekTo,
+    seekForward: ttsSeekForward,
+    seekBackward: ttsSeekBackward
+  } = useTTS({ 
+    text: extractArticleText(processedContent || article?.content || ''),
+  });
 
-  // Reset processed content when article changes
+  const [showTTSPlayer, setShowTTSPlayer] = useState<boolean>(false);
+
   useEffect(() => {
     setProcessedContent('');
     setAuthorImage(null);
   }, [article?.title]);
 
-  // Set Paul Graham article flag based on URL
   useEffect(() => {
     if (originalUrl) {
       setIsPaulGrahamArticle(originalUrl.includes('paulgraham.com'));
     }
   }, [originalUrl]);
 
-  // Process the article content to add custom styling
   useEffect(() => {
     if (article && article.content) {
       console.log("Processing article content in ArticleReader", { 
@@ -76,15 +92,11 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     }
   }, [article, originalUrl, thumbnailUrl]);
 
-  // Use custom hook to get enhanced content by wrapping words in spans
   const enhancedContentMemo = useEnhancedContent(processedContent);
 
-  // Extract the sentence containing the target word
   const extractSentence = (element: HTMLElement, targetWord: string): string => {
-    // Find the parent paragraph or similar container
     let container = element;
     
-    // Walk up the DOM to find a paragraph or similar container
     while (
       container && 
       !['P', 'DIV', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(container.tagName)
@@ -93,37 +105,30 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     }
     
     if (!container) {
-      return targetWord; // Fallback to just the word if no container found
+      return targetWord;
     }
     
-    // Get the text content of the container
     const text = container.textContent || '';
     
-    // Split text into sentences using regex that handles various end-of-sentence punctuation
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     
-    // Find the sentence containing the target word
     for (const sentence of sentences) {
-      // Use word boundary to find the exact word match
       const wordRegex = new RegExp(`\\b${targetWord}\\b`, 'i');
       if (wordRegex.test(sentence)) {
         return sentence.trim();
       }
     }
     
-    // If no sentence was found, return a portion of text around the word as fallback
     const wordIndex = text.indexOf(targetWord);
     if (wordIndex !== -1) {
-      // Extract text before and after the word (about 50 chars each direction)
       const start = Math.max(0, wordIndex - 50);
       const end = Math.min(text.length, wordIndex + targetWord.length + 50);
       return text.substring(start, end).trim();
     }
     
-    return targetWord; // Last resort fallback
+    return targetWord;
   };
 
-  // Handle document clicks (for closing popup when clicking outside)
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -139,7 +144,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     };
   }, [selectedWord]);
 
-  // Handle word click with improved behavior for switching between words
   const handleWordClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains('article-word')) {
@@ -147,12 +151,10 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
       const word = target.textContent || '';
       const wordRect = target.getBoundingClientRect();
       
-      // If clicking the same word that's already selected, do nothing
       if (selectedWord === word) {
         return;
       }
       
-      // Extract the sentence containing this word
       const sentence = extractSentence(target, word);
       
       if (articleContentRef.current) {
@@ -169,6 +171,76 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
       setPopupPosition(null);
       setCurrentSentence('');
     }
+  };
+
+  function extractArticleText(htmlContent: string): string {
+    if (typeof document !== 'undefined') {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlContent;
+      
+      // Remove BBC byline blocks
+      const bylineBlocks = tempDiv.querySelectorAll('[data-testid="byline-new"], [data-component="byline-block"]');
+      bylineBlocks.forEach(block => block.remove());
+      
+      // Remove BBC labels - use a more compatible approach
+      const articleWords = tempDiv.querySelectorAll('.article-word');
+      articleWords.forEach(word => {
+        if (word.textContent && word.textContent.trim() === 'BBC') {
+          word.remove();
+        }
+      });
+      
+      // Remove image source/caption elements
+      const imageCaptions = tempDiv.querySelectorAll('figcaption');
+      imageCaptions.forEach(caption => caption.remove());
+      
+      // Get all text content
+      let text = tempDiv.textContent || '';
+      
+      // Additional BBC-specific text cleanup
+      text = text
+        .replace(/BBC/g, '')                      // Remove "BBC" text
+        .replace(/by\s+\w+\s+\w+/gi, '')          // Remove "by Author Name" patterns
+        .replace(/Presenter[,\s]*/g, '')          // Remove "Presenter" labels
+        .replace(/with\s+\w+\s+\w+/gi, '')        // Remove "with Name Name" patterns
+        .replace(/@[a-zA-Z0-9_]+/g, '')           // Remove Twitter handles
+        .replace(/\d+\s+hours?\s+ago/g, '')       // Remove "X hours ago" 
+        .replace(/\s{2,}/g, ' ');                 // Normalize multiple spaces
+      
+      // Trim to avoid OpenAI API limits (approximately 32k chars)
+      if (text.length > 30000) {
+        console.log('Article text too long, truncating for TTS');
+        text = text.substring(0, 30000) + '... (Article continues)';
+      }
+      
+      return text;
+    }
+    return '';
+  }
+
+  const formatTime = (timeInSeconds: number): string => {
+    if (!timeInSeconds || isNaN(timeInSeconds)) return '00:00';
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = Math.floor(timeInSeconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleProgressBarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value);
+    seekTo(value / 100);
+  };
+
+  useEffect(() => {
+    if (isPlaying || isTTSLoading || (ttsDuration > 0 && !ttsError)) {
+      setShowTTSPlayer(true);
+    }
+  }, [isPlaying, isTTSLoading, ttsDuration, ttsError]);
+
+  const closeMediaPlayer = () => {
+    if (isPlaying) {
+      pauseTTS();
+    }
+    setShowTTSPlayer(false);
   };
 
   if (isLoading) {
@@ -209,7 +281,14 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     setIsDarkMode(!isDarkMode);
   };
 
-  // Extract job title if present in byline
+  const toggleTTS = () => {
+    if (isPlaying) {
+      pauseTTS();
+    } else {
+      playTTS();
+    }
+  };
+
   let authorName = article.byline || '';
   
   if (authorName.includes(',')) {
@@ -218,7 +297,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   }
 
   return (
-    <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200`}>
+    <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200 ${showTTSPlayer ? 'pb-28' : ''}`}>
       <div className="sticky top-0 z-10 flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-800 bg-inherit backdrop-blur-sm bg-white/90 dark:bg-gray-900/90">
         <div className="flex space-x-3">
           <button
@@ -278,6 +357,87 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
               </svg>
             )}
           </button>
+          
+          <button
+            onClick={toggleTTS}
+            disabled={isTTSLoading}
+            className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative ${ttsError ? 'text-red-500' : ''}`}
+            aria-label={isPlaying ? "Pause text-to-speech" : "Play text-to-speech"}
+            title={isPlaying ? "Pause text-to-speech" : (ttsError ? "Error: Try again" : "Play text-to-speech")}
+          >
+            {isTTSLoading ? (
+              <svg 
+                className="w-5 h-5 text-gray-600 dark:text-gray-300 animate-spin" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                />
+              </svg>
+            ) : ttsError ? (
+              <svg 
+                className="w-5 h-5 text-red-500" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" 
+                />
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" 
+                />
+              </svg>
+            ) : isPlaying ? (
+              <svg 
+                className="w-5 h-5 text-indigo-600 dark:text-indigo-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" 
+                />
+              </svg>
+            ) : (
+              <svg 
+                className="w-5 h-5 text-gray-600 dark:text-gray-300" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24" 
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" 
+                />
+              </svg>
+            )}
+            
+            {isPlaying && (
+              <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 rounded-full" style={{ width: `${ttsProgress * 100}%` }}></div>
+            )}
+          </button>
+          
           {originalUrl && (
             <a
               href={originalUrl}
@@ -304,7 +464,168 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             </a>
           )}
         </div>
+        
+        {ttsError && (
+          <div className="absolute top-full left-0 right-0 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs p-2 rounded-b-lg">
+            {ttsError}
+          </div>
+        )}
       </div>
+
+      {showTTSPlayer && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 p-3 bg-indigo-50 dark:bg-indigo-900/80 mx-auto shadow-lg border-t border-indigo-100 dark:border-indigo-800 backdrop-blur-sm">
+          <div className="max-w-3xl mx-auto flex flex-col space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600 dark:text-gray-300">{formatTime(ttsCurrentTime)}</span>
+              
+              <button
+                onClick={closeMediaPlayer}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                aria-label="Close media player"
+                title="Close media player"
+              >
+                <svg 
+                  className="w-5 h-5" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M6 18L18 6M6 6l12 12" 
+                  />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className="w-full relative">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={ttsProgress * 100}
+                  onChange={handleProgressBarChange}
+                  className="w-full h-2 bg-indigo-200 dark:bg-indigo-800 rounded-lg appearance-none cursor-pointer accent-indigo-600 dark:accent-indigo-400"
+                  aria-label="Audio progress"
+                />
+              </div>
+              <span className="text-xs text-gray-600 dark:text-gray-300 min-w-[40px] text-right">{formatTime(ttsDuration)}</span>
+            </div>
+            
+            <div className="flex justify-center items-center space-x-4">
+              <button
+                onClick={() => ttsSeekBackward(5)}
+                className="p-2 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
+                aria-label="Back 5 seconds"
+                title="Back 5 seconds"
+              >
+                <svg 
+                  className="w-5 h-5" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" 
+                  />
+                </svg>
+                <span className="absolute text-xs font-bold top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">5</span>
+              </button>
+              
+              <button
+                onClick={toggleTTS}
+                disabled={isTTSLoading}
+                className="p-2 rounded-full bg-indigo-600 dark:bg-indigo-700 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white transition-colors"
+                aria-label={isPlaying ? "Pause" : "Play"}
+              >
+                {isTTSLoading ? (
+                  <svg 
+                    className="w-6 h-6 animate-spin" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24" 
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                    />
+                  </svg>
+                ) : isPlaying ? (
+                  <svg 
+                    className="w-6 h-6" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24" 
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" 
+                    />
+                  </svg>
+                ) : (
+                  <svg 
+                    className="w-6 h-6" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24" 
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" 
+                    />
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                    />
+                  </svg>
+                )}
+              </button>
+              
+              <button
+                onClick={() => ttsSeekForward(5)}
+                className="p-2 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
+                aria-label="Forward 5 seconds"
+                title="Forward 5 seconds"
+              >
+                <svg 
+                  className="w-5 h-5" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" 
+                  />
+                </svg>
+                <span className="absolute text-xs font-bold top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">5</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="p-6 md:p-8">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">{article.title}</h1>
@@ -391,7 +712,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
         
         <div className="relative" ref={articleContentRef}>
           <div 
-            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
+            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize === 'text-base' ? 'text-base' : fontSize === 'text-lg' ? 'text-lg' : 'text-xl'} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
             dangerouslySetInnerHTML={{ __html: enhancedContentMemo || processedContent || article.content }}
             onClick={handleWordClick}
           />
@@ -404,7 +725,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           )}
         </div>
         
-        {/* Fallback content display if the article isn't rendering */}
         {isPaulGrahamArticle && !processedContent && (
           <div className="mt-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
             <h3 className="text-lg font-semibold mb-2">Raw Article Content</h3>
@@ -511,7 +831,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             list-style-type: decimal;
           }
           
-          /* Paul Graham specific styling */
           .pg-article {
             font-family: Verdana, sans-serif;
           }
@@ -521,7 +840,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             margin-bottom: 1.5rem;
           }
           
-          /* Styling for individual word interactions */
           .article-word {
             cursor: pointer;
             border-radius: 2px;
@@ -533,6 +851,48 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           .article-word:hover {
             background-color: ${isDarkMode ? 'rgba(147, 197, 253, 0.3)' : 'rgba(59, 130, 246, 0.15)'};
             border-radius: 3px;
+          }
+          
+          input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            outline: none;
+          }
+          
+          input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background-color: ${isDarkMode ? '#818cf8' : '#4f46e5'};
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          }
+          
+          input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background-color: ${isDarkMode ? '#818cf8' : '#4f46e5'};
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          }
+          
+          input[type="range"]::-webkit-slider-thumb:hover,
+          input[type="range"]::-moz-range-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 0 2px ${isDarkMode ? 'rgba(129, 140, 248, 0.3)' : 'rgba(79, 70, 229, 0.3)'};
+          }
+          
+          .skip-button {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
         `}</style>
       </div>
