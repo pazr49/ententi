@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -118,5 +118,9 @@ function ArticleContent() {
 
 // Wrap with suspense boundary
 export default function ArticlePage() {
-  return <ArticleContent />;
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading article...</div>}>
+      <ArticleContent />
+    </Suspense>
+  );
 } 
