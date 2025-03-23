@@ -9,7 +9,7 @@ async function MultiFeeds() {
   
   return (
     <div className="article-feeds-container">
-      <h1 className="article-list-title">News From Around The World</h1>
+      <h1 className="article-list-title">Or choose an article from the list below</h1>
       <ClientWrapper serializedFeeds={JSON.stringify(allFeeds)} />
     </div>
   );
@@ -22,11 +22,11 @@ export default function Home() {
         <div className="hero-container">
           <div className="hero-content">
             <h1 className="hero-title">
-              Learn Languages Through <span className="text-indigo-600 dark:text-indigo-400">Personalized Reading</span>
+              Read Your Way to <span className="text-indigo-600 dark:text-indigo-400">Fluency</span>
             </h1>
             <p className="hero-subtitle">
-              Ententi helps you learn any language by reading content you love, 
-              perfectly adapted to your reading level with instant translations.
+              Discover a smarter way to learn languages by reading content you love, 
+              adapted and tailored to your level.
             </p>
             <div className="hero-cta-container">
               <UrlSubmitWrapper />
@@ -42,7 +42,7 @@ export default function Home() {
       <main className="pb-16">
         <Suspense fallback={
           <div className="article-feeds-container">
-            <h1 className="article-list-title">News From Around The World</h1>
+            <h1 className="article-list-title">Or choose an article from the list below</h1>
             <div className="animate-pulse">
               {/* Skeleton for multiple feeds */}
               {[...Array(2)].map((_, feedIndex) => (

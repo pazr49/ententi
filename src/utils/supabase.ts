@@ -119,13 +119,13 @@ export const getEdgeFunctionUrl = (functionName: string): string => {
  * Call a Supabase Edge Function
  * @param functionName The name of the Edge Function
  * @param payload The payload to send to the function
- * @param token Optional authentication token
+ * @param options Optional request options including token and signal for AbortController
  * @returns The response from the Edge Function
  */
 export const callEdgeFunction = async <T, R>(
   functionName: string, 
   payload: T, 
-  token?: string
+  options?: { token?: string; signal?: AbortSignal; skipAuth?: boolean }
 ): Promise<R> => {
   const url = getEdgeFunctionUrl(functionName);
   
@@ -133,19 +133,22 @@ export const callEdgeFunction = async <T, R>(
     'Content-Type': 'application/json',
   };
   
-  // If a token is provided, use it
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  } 
-  // Otherwise, try to get the current session token
-  else {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+  // Skip authentication if skipAuth is true
+  if (!options?.skipAuth) {
+    // If a token is provided, use it
+    if (options?.token) {
+      headers['Authorization'] = `Bearer ${options.token}`;
+    } 
+    // Otherwise, try to get the current session token
+    else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      } catch (error) {
+        console.warn('Failed to get session token for Edge Function call:', error);
       }
-    } catch (error) {
-      console.warn('Failed to get session token for Edge Function call:', error);
     }
   }
   
@@ -153,6 +156,7 @@ export const callEdgeFunction = async <T, R>(
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
+    signal: options?.signal
   });
   
   if (!response.ok) {

@@ -4,7 +4,9 @@ import { applyCommonStyling, removeCommonUnwantedElements } from './utils';
 
 export const bbcProcessor: ArticleProcessor = {
   canProcess: (url: string): boolean => {
-    return url.includes('bbc.co.uk') || url.includes('bbc.com');
+    const isBBC = url.includes('bbc.co.uk') || url.includes('bbc.com');
+    console.log(`URL ${url} is ${isBBC ? 'recognized' : 'not recognized'} as a BBC article`);
+    return isBBC;
   },
   
   process: (url: string, article: ReadableArticle, thumbnailUrl?: string): ArticleProcessingResult => {
@@ -12,7 +14,7 @@ export const bbcProcessor: ArticleProcessor = {
       processedContent: article.content
     };
     
-    console.log("Processing BBC article");
+    console.log("Processing BBC article:", url);
     
     // Create a temporary DOM element to manipulate the HTML
     const tempDiv = document.createElement('div');
@@ -50,34 +52,154 @@ export const bbcProcessor: ArticleProcessor = {
     const promoElements = tempDiv.querySelectorAll('[data-component="links-block"], [data-component="tag-list"], [data-component="see-alsos"]');
     promoElements.forEach(el => el.remove());
     
-    // Remove BBC byline blocks and related elements
-    const bylineElements = tempDiv.querySelectorAll(
-      '[data-testid="byline-new"], ' +
-      '[data-component="byline-block"], ' +
-      '[data-testid="byline-new-contributors"], ' +
-      '.byline, ' +
-      '.byline-block, ' +
-      '.article__byline, ' +
-      'time, ' + 
-      'datetime, ' +
-      '.article-info, ' +
-      '.author-info, ' +
-      '.published-date'
-    );
-    bylineElements.forEach(el => el.remove());
+    // DEBUG: Log the HTML before cleaning bylines
+    console.log("Before byline removal - first 500 chars:", tempDiv.innerHTML.substring(0, 500) + "...");
     
-    // Remove specific mention of "BBC" in spans
-    const allSpans = tempDiv.querySelectorAll('span');
-    allSpans.forEach(span => {
-      if (span.textContent?.trim() === 'BBC' || span.classList.contains('article-word')) {
-        // Check if this is a BBC identifier or author-related span
-        if (
-          span.textContent?.trim() === 'BBC' || 
-          span.textContent?.includes('Presenter') ||
-          span.textContent?.includes('Reporter') ||
-          span.parentElement?.textContent?.includes('hours ago')
-        ) {
-          span.remove();
+    // NUCLEAR OPTION: DIRECT HTML STRING REPLACEMENT
+    // This is the most extreme approach when DOM manipulation fails
+    let htmlContent = tempDiv.innerHTML;
+    
+    // Log some debug info
+    console.log("Does HTML contain byline-new?", htmlContent.includes('data-testid="byline-new"'));
+    console.log("Does HTML contain byline-block?", htmlContent.includes('data-component="byline-block"'));
+    
+    // Direct regex replacement of the byline block pattern
+    const bylineRegex = /<div[^>]*data-testid="byline-new"[^>]*data-component="byline-block"[^>]*>[\s\S]*?<\/div>/gi;
+    const bylineRegex2 = /<div[^>]*data-component="byline-block"[^>]*data-testid="byline-new"[^>]*>[\s\S]*?<\/div>/gi;
+    
+    // Look for specific patterns and replace them
+    htmlContent = htmlContent.replace(bylineRegex, '');
+    htmlContent = htmlContent.replace(bylineRegex2, '');
+    
+    // Also try to match the byline fragment you provided
+    if (htmlContent.includes('data-testid="byline-new"') || htmlContent.includes('data-component="byline-block"')) {
+      console.log("Still found byline elements after regex replacement, trying fragment matching");
+      
+      // Look for fragments containing both attributes in various forms
+      const patterns = [
+        /<div[^>]*data-testid="byline-new"[^>]*>[\s\S]*?<\/div>/gi,
+        /<div[^>]*data-component="byline-block"[^>]*>[\s\S]*?<\/div>/gi,
+        /<div[^>]*data-testid="byline-new-contributors"[^>]*>[\s\S]*?<\/div>/gi,
+        /<time[^>]*>[\s\S]*?<\/time>/gi,
+        /<p><span><span class="processed-for-words">[\s\S]*?<\/span><\/span><\/p>/gi
+      ];
+      
+      patterns.forEach(pattern => {
+        const beforeLength = htmlContent.length;
+        htmlContent = htmlContent.replace(pattern, '');
+        const afterLength = htmlContent.length;
+        if (beforeLength !== afterLength) {
+          console.log(`Removed ${beforeLength - afterLength} characters with pattern ${pattern}`);
+        }
+      });
+    }
+    
+    // Apply the cleaned HTML back to the DOM
+    tempDiv.innerHTML = htmlContent;
+
+    // NEW STEP: Direct removal of divs with data-component="byline-block"
+    const bylineBlockEls = tempDiv.querySelectorAll('div[data-component="byline-block"]');
+    console.log("Direct removal of byline-block elements: Found", bylineBlockEls.length);
+    bylineBlockEls.forEach(el => {
+      console.log("Directly removing byline-block element:", el.outerHTML.substring(0, 100) + "...");
+      el.remove();
+    });
+
+    // Continue with the existing approaches as fallbacks
+    // NEW DIRECT STRING MATCHING APPROACH - Look for the exact structure in HTML
+    const htmlString = tempDiv.innerHTML;
+    
+    // Looking for common patterns in the byline HTML
+    if (htmlString.includes('data-testid="byline-new"') || 
+        htmlString.includes('data-component="byline-block"')) {
+      console.log("Direct HTML match found, attempting targeted removal");
+      
+      // Find all div elements that could be containers
+      const possibleContainers = Array.from(tempDiv.querySelectorAll('div'));
+      
+      // We'll look for div elements containing both byline attributes
+      possibleContainers.forEach(div => {
+        const outerHTML = div.outerHTML || '';
+        
+        // Check if this div contains both key attributes in its HTML
+        if ((outerHTML.includes('data-testid="byline-new"') && 
+             outerHTML.includes('data-component="byline-block"')) || 
+            (div.hasAttribute('data-testid') && div.getAttribute('data-testid') === 'byline-new') ||
+            (div.hasAttribute('data-component') && div.getAttribute('data-component') === 'byline-block')) {
+          console.log("Found exact match by HTML attributes", outerHTML.substring(0, 100) + "...");
+          div.remove();
+        }
+      });
+    }
+
+    // REMAINING AGGRESSIVE APPROACHES
+    // AGGRESSIVE BYLINE REMOVAL - First direct approach for exact matches
+    const exactBylineElements = tempDiv.querySelectorAll('div[data-testid="byline-new"][data-component="byline-block"]');
+    console.log(`Found ${exactBylineElements.length} exact byline matches`);
+    exactBylineElements.forEach(el => {
+      console.log("Removing exact byline match:", el.outerHTML.substring(0, 100) + "...");
+      el.remove();
+    });
+
+    // Second approach - any element with either byline attribute
+    const bylineElements = tempDiv.querySelectorAll(
+      '[data-testid^="byline-"], ' +
+      '[data-component="byline-block"], ' + 
+      '[data-testid="byline-new"], ' + 
+      '[data-testid="byline-new-contributors"], ' + 
+      '.byline, ' + 
+      '.byline-block, ' + 
+      '.article__byline, ' + 
+      'time, ' + 
+      'datetime, ' + 
+      '.article-info, ' + 
+      '.author-info, ' + 
+      '.published-date, ' + 
+      'div[class*="byline"], ' +
+      'div[class*="Byline"]'
+    );
+    console.log(`Found ${bylineElements.length} byline matches`);
+    bylineElements.forEach(el => {
+      console.log("Removing byline:", el.outerHTML.substring(0, 100) + "...");
+      el.remove();
+    });
+
+    // Third approach - target by content and structure
+    // Find all divs that contain the reporter/author information
+    const allDivs = Array.from(tempDiv.querySelectorAll('div')) as HTMLElement[];
+    allDivs.forEach(div => {
+      // Check if this div contains reporter/author names or time information
+      const timeElement = div.querySelector('time');
+      const processedWords = div.querySelectorAll('.processed-for-words, .article-word');
+      const hasBBC = div.textContent?.includes('BBC News') || div.textContent?.includes('hours ago');
+      
+      if ((timeElement || processedWords.length > 0 || hasBBC) && 
+          (div.textContent?.includes('hours ago') || div.textContent?.includes('BBC'))) {
+        // This is likely a byline container - find the highest parent that's likely the entire byline block
+        let parentToRemove = div;
+        let currentParent = div.parentElement;
+        while (currentParent && 
+               currentParent.tagName === 'DIV' && 
+               currentParent.children.length === 1) {
+          parentToRemove = currentParent;
+          currentParent = currentParent.parentElement;
+        }
+        console.log("Removing content-based match:", parentToRemove.outerHTML.substring(0, 100) + "...");
+        parentToRemove.remove();
+      }
+    });
+
+    // Additional cleanup for any article-word spans containing author names or roles
+    const wordSpans = tempDiv.querySelectorAll('.article-word, .processed-for-words span');
+    wordSpans.forEach(span => {
+      const parent = span.closest('[data-testid^="byline-"], [data-component="byline-block"], div[class*="byline"]');
+      if (parent) {
+        // If span is inside a byline container that wasn't caught by the earlier removal
+        const topLevelContainer = parent.closest('div');
+        if (topLevelContainer) {
+          topLevelContainer.remove();
+        } else {
+          parent.remove();
         }
       }
     });
@@ -174,6 +296,9 @@ export const bbcProcessor: ArticleProcessor = {
     
     result.processedContent = tempDiv.innerHTML;
     result.authorImage = authorImage;
+    
+    // DEBUG: Log the HTML after cleaning bylines
+    console.log("After byline removal:", tempDiv.innerHTML.substring(0, 500) + "...");
     
     return result;
   }

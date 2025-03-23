@@ -381,32 +381,17 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Check for authentication (required)
+    // Authentication is now optional
     const authHeader = req.headers.get('Authorization');
+    // We track authentication status but don't require it
+    // This could be used for rate limiting or analytics in the future
+    const isAuthenticated = !!(authHeader && authHeader.startsWith('Bearer '));
 
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Authentication required", 
-          message: "You must be logged in to use this feature" 
-        }),
-        { headers, status: 401 }
-      );
+    if (isAuthenticated) {
+      console.log("Received authentication token");
+    } else {
+      console.log("No authentication token provided - proceeding as unauthenticated user");
     }
-
-    // Verify the token format
-    if (!authHeader.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Invalid authorization format", 
-          message: "Authorization header must start with 'Bearer '" 
-        }),
-        { headers, status: 401 }
-      );
-    }
-
-    // Log that we received a token
-    console.log("Received authentication token");
 
     // Get the API key from environment variables
     // @ts-expect-error - Deno is available in the Supabase Edge Function environment

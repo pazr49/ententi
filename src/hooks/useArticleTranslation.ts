@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ReadableArticle } from '@/utils/readability';
 import { callEdgeFunction } from '@/utils/supabase';
 
@@ -12,6 +12,7 @@ interface UseArticleTranslationResult {
     readingAge: string, 
     region?: string
   ) => Promise<void>;
+  cancelTranslation: () => void;
 }
 
 /**
@@ -21,6 +22,18 @@ export function useArticleTranslation(): UseArticleTranslationResult {
   const [translatedArticle, setTranslatedArticle] = useState<ReadableArticle | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  /**
+   * Cancel the current translation if one is in progress
+   */
+  const cancelTranslation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsTranslating(false);
+    }
+  };
 
   /**
    * Translate an article using the Edge Function
@@ -34,6 +47,12 @@ export function useArticleTranslation(): UseArticleTranslationResult {
     if (!article) return;
     
     try {
+      // Cancel any ongoing translation
+      cancelTranslation();
+      
+      // Create a new AbortController for this request
+      abortControllerRef.current = new AbortController();
+      
       setIsTranslating(true);
       setTranslationError(null);
       
@@ -48,15 +67,26 @@ export function useArticleTranslation(): UseArticleTranslationResult {
           targetLanguage: language,
           readingAge: readingAge,
           region: region
+        },
+        { 
+          signal: abortControllerRef.current.signal,
+          skipAuth: true // Skip authentication to allow non-authenticated users to use the feature
         }
       );
       
       setTranslatedArticle(translatedData);
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Translation was canceled');
+        return;
+      }
+      
       console.error('Error translating article:', error);
       setTranslationError(error instanceof Error ? error.message : 'Failed to translate article. Please try again.');
     } finally {
       setIsTranslating(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -64,6 +94,7 @@ export function useArticleTranslation(): UseArticleTranslationResult {
     translatedArticle,
     isTranslating,
     translationError,
-    translate
+    translate,
+    cancelTranslation
   };
 } 
