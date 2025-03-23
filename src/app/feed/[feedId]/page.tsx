@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { fetchSingleRssFeed } from '@/utils/rss';
 import { getFeedById, getAllFeedIds } from '@/utils/feedConfig';
-import ArticleList from '@/components/ArticleList';
+import { ArticleList } from '@/components/articles';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { scrapeColombiaOne } from '@/utils/articleProcessors/colombiaOneScraper';

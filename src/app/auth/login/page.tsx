@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import AuthForm from '@/components/AuthForm';
+import { AuthForm } from '@/components/auth';
 import { useAuth } from '@/context/AuthContext';
 
 // Create a wrapper component for the actual content

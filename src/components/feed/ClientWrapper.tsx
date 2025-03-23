@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Feed } from '@/utils/rss';
-import FeedRow from './FeedRow';
-import DebugInfo from './DebugInfo';
+import { FeedRow } from '@/components/feed';
+import { DebugInfo } from '@/components/ui';
 
 interface ClientWrapperProps {
   serializedFeeds: string;

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSavedArticles } from '@/context/SavedArticlesContext';
 import { Article } from '@/types';
-import ArticleCard from './ArticleCard';
+import { ArticleCard } from '@/components/articles';
 
 interface ArticleListProps {
   articles: Article[];
