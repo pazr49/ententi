@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ententi - Learn Languages Through Reading",
   description: "Learn any language by reading content you love, perfectly adapted to your reading level with instant translations",
+  icons: {
+    icon: '/globe.svg',
+  },
 };
 
 export default function RootLayout({
