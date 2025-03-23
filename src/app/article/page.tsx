@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 // Import components using the new structure
 import { 
-  ArticleReader, 
-  ArticleHeader, 
+  ArticleReader,
   ArticleStatusMessage 
 } from '@/components/articles';
 import { TranslationSettings } from '@/components/ui';
@@ -19,16 +18,20 @@ import { useArticleSaving } from '@/hooks/useArticleSaving';
 
 function ArticleContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const url = searchParams.get('url');
   const { user } = useAuth();
   
   // Use our custom hooks
   const { article, isLoading, error, fetchArticle } = useArticleFetching();
-  const { translatedArticle, isTranslating, translationError, translate } = useArticleTranslation();
-  const { isSaved, savedArticle, isRemoving, handleRemoveArticle } = useArticleSaving(url);
+  const { translatedArticle, isTranslating, translationError, translate, cancelTranslation } = useArticleTranslation();
+  const { isSaved } = useArticleSaving(url);
   
   const [isClient, setIsClient] = useState(false);
+  const [translationRegion, setTranslationRegion] = useState<string | undefined>();
+  const [translationLanguage, setTranslationLanguage] = useState<string | undefined>();
+  
+  // Store pending translation info to apply when translation completes
+  const pendingTranslationRef = useRef<{language?: string, region?: string}>({});
 
   // Set isClient once component mounts
   useEffect(() => {
@@ -38,10 +41,11 @@ function ArticleContent() {
   // Fetch article if it's saved or handle redirect
   useEffect(() => {
     if (isClient && url) {
-      if (isSaved) {
-        // Only fetch if needed (when the URL changes)
+      if (isSaved || !user) {
+        // If the article is saved, or the user is not logged in, fetch the article
         fetchArticle(url);
       } else {
+        // For logged in users with unsaved articles, check if we should load the article or redirect
         const readerFlag = sessionStorage.getItem('articleReaderView');
         const storedUrl = sessionStorage.getItem('currentArticleUrl');
         
@@ -51,27 +55,31 @@ function ArticleContent() {
         }
       }
     }
-  }, [url, isSaved, isClient]); // Remove article and fetchArticle from dependencies
+  }, [url, isSaved, isClient, user, article, fetchArticle]);
 
-  // Handle article removal and navigation
-  const handleRemove = async () => {
-    if (!savedArticle) return;
-    
-    await handleRemoveArticle(savedArticle.guid);
-    
-    // Navigate back to saved articles page after unsaving
-    router.push('/saved');
-  };
+  // Update translation info when translation completes
+  useEffect(() => {
+    if (translatedArticle && !isTranslating) {
+      // Apply the pending translation info when translation finishes successfully
+      setTranslationLanguage(pendingTranslationRef.current.language);
+      setTranslationRegion(pendingTranslationRef.current.region);
+    } else if (!translatedArticle) {
+      // Clear translation info when there's no translated article
+      setTranslationLanguage(undefined);
+      setTranslationRegion(undefined);
+    }
+  }, [translatedArticle, isTranslating]);
 
-  // Handle translation with user check
+  // Handle translation
   const handleTranslate = async (language: string, readingAge: string, region?: string) => {
     if (!article) return;
     
-    // Check if user is authenticated
-    if (!user) {
-      // Show authentication error
-      return;
-    }
+    // Store info for when translation completes, but don't set state yet
+    pendingTranslationRef.current = { language, region };
+    
+    // Clear current translation info at the start of a new translation
+    setTranslationLanguage(undefined);
+    setTranslationRegion(undefined);
     
     await translate(article, language, readingAge, region);
   };
@@ -80,37 +88,33 @@ function ArticleContent() {
   const displayArticle = translatedArticle || article;
 
   return (
-    <div className="article-page-container max-w-4xl mx-auto px-4 py-8">
+    <div className="article-page-container px-4 py-8">
       {/* Status messages */}
       <ArticleStatusMessage 
         isLoading={isLoading}
         error={error}
-        isTranslating={isTranslating}
         translationError={translationError}
       />
       
-      {/* Article header with title and actions */}
-      <ArticleHeader
-        article={displayArticle}
-        isSaved={isSaved}
-        isRemoving={isRemoving}
-        onRemoveArticle={handleRemove}
-        originalUrl={url}
-      />
-      
       {/* Translation settings */}
-      {user && displayArticle && (
+      {displayArticle && (
         <TranslationSettings 
           onTranslate={handleTranslate}
           isTranslating={isTranslating}
+          onCancel={cancelTranslation}
         />
       )}
       
       {/* Main article content */}
       {displayArticle && (
-        <div className="article-content">
-          <ArticleReader article={displayArticle} />
-        </div>
+        <ArticleReader 
+          article={displayArticle} 
+          originalUrl={url || undefined}
+          translationInfo={translatedArticle ? {
+            region: translationRegion,
+            language: translationLanguage
+          } : undefined}
+        />
       )}
     </div>
   );
@@ -119,7 +123,7 @@ function ArticleContent() {
 // Wrap with suspense boundary
 export default function ArticlePage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Loading article...</div>}>
+    <Suspense fallback={<div></div>}>
       <ArticleContent />
     </Suspense>
   );

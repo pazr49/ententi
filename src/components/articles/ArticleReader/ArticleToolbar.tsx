@@ -1,11 +1,11 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface ArticleToolbarProps {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
-  toggleFontSize: () => void;
+  toggleFontSize: (size: number) => void;
   tts: {
     isPlaying: boolean;
     isLoading: boolean;
@@ -14,6 +14,10 @@ interface ArticleToolbarProps {
     toggleTTS: () => void;
   };
   originalUrl?: string;
+  translationInfo?: {
+    region?: string;
+    language?: string;
+  };
 }
 
 export default function ArticleToolbar({
@@ -21,31 +25,197 @@ export default function ArticleToolbar({
   toggleDarkMode,
   toggleFontSize,
   tts,
-  originalUrl
+  originalUrl,
+  translationInfo
 }: ArticleToolbarProps) {
+  
+  // Helper function to get the flag emoji based on region
+  const getRegionFlag = (region?: string): string => {
+    if (!region) return '';
+    
+    // Map region codes to flag emojis (using country emoji flags)
+    const flagMap: {[key: string]: string} = {
+      // Spanish regions
+      'es': '🇪🇸', // Spain
+      'mx': '🇲🇽', // Mexico
+      'co': '🇨🇴', // Colombia
+      'ar': '🇦🇷', // Argentina
+      'pe': '🇵🇪', // Peru
+      'cl': '🇨🇱', // Chile
+      
+      // French regions
+      'fr': '🇫🇷', // France
+      'ca': '🇨🇦', // Canada
+      'be': '🇧🇪', // Belgium
+      'ch': '🇨🇭', // Switzerland
+      
+      // German regions
+      'de': '🇩🇪', // Germany
+      'at': '🇦🇹', // Austria
+      
+      // Italian regions
+      'it': '🇮🇹', // Italy
+      
+      // Portuguese regions
+      'pt': '🇵🇹', // Portugal
+      'br': '🇧🇷', // Brazil
+    };
+    
+    return flagMap[region] || '';
+  };
+  
+  // Helper function to get language name from code
+  const getLanguageName = (code?: string): string => {
+    if (!code) return '';
+    
+    const languageMap: {[key: string]: string} = {
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'pt': 'Portuguese'
+    };
+    
+    return languageMap[code] || code;
+  };
+  
+  // Helper function to get region name from code
+  const getRegionName = (region?: string): string => {
+    if (!region) return '';
+    
+    const regionMap: {[key: string]: string} = {
+      // Spanish regions
+      'es': 'Spain',
+      'mx': 'Mexico',
+      'co': 'Colombia',
+      'ar': 'Argentina',
+      'pe': 'Peru',
+      'cl': 'Chile',
+      
+      // French regions
+      'fr': 'France',
+      'ca': 'Canada',
+      'be': 'Belgium',
+      'ch': 'Switzerland',
+      
+      // German regions
+      'de': 'Germany',
+      'at': 'Austria',
+      
+      // Italian regions
+      'it': 'Italy',
+      
+      // Portuguese regions
+      'pt': 'Portugal',
+      'br': 'Brazil',
+    };
+    
+    return regionMap[region] || region;
+  };
+  
+  const flagEmoji = translationInfo?.region ? getRegionFlag(translationInfo.region) : '';
+  const languageName = getLanguageName(translationInfo?.language);
+  const regionName = getRegionName(translationInfo?.region);
+  
+  // Create a descriptive title for the translation
+  const translationTitle = translationInfo?.language 
+    ? `Translated to ${languageName}${regionName ? ` (${regionName})` : ''}`
+    : '';
+  
+  const [showFontSizeSlider, setShowFontSizeSlider] = useState<boolean>(false);
+  const [currentFontSize, setCurrentFontSize] = useState<number>(2); // Default to medium (1-4 scale)
+  
+  const fontSizeSliderRef = useRef<HTMLDivElement>(null);
+  
+  // Close slider when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fontSizeSliderRef.current && !fontSizeSliderRef.current.contains(event.target as Node)) {
+        setShowFontSizeSlider(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [fontSizeSliderRef]);
+  
+  const handleFontSizeChange = (size: number) => {
+    setCurrentFontSize(size);
+    // Call the parent's toggleFontSize with the appropriate size
+    toggleFontSize(size);
+  };
+  
   return (
     <div className="sticky top-0 z-10 flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-800 bg-inherit backdrop-blur-sm bg-white/90 dark:bg-gray-900/90">
       <div className="flex space-x-3">
-        <button
-          onClick={toggleFontSize}
-          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Change font size"
-        >
-          <svg 
-            className="w-5 h-5 text-gray-600 dark:text-gray-300" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24" 
-            xmlns="http://www.w3.org/2000/svg"
+        <div className="relative" ref={fontSizeSliderRef}>
+          <div 
+            className={`flex items-center rounded-full overflow-hidden transition-all duration-300 ease-in-out ${
+              showFontSizeSlider 
+                ? 'bg-white dark:bg-gray-800 shadow-md pl-2 pr-3 py-1.5 w-48' 
+                : 'hover:bg-gray-100 dark:hover:bg-gray-800 w-10 h-10 justify-center'
+            }`}
           >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" 
-            />
-          </svg>
-        </button>
+            <button
+              onClick={() => setShowFontSizeSlider(!showFontSizeSlider)}
+              className={`flex items-center justify-center transition-transform duration-200 ${
+                showFontSizeSlider ? 'mr-2 scale-90' : 'w-10 h-10'
+              }`}
+              aria-label="Change font size"
+            >
+              <span className={`flex items-center justify-center text-gray-600 dark:text-gray-300 transition-colors ${showFontSizeSlider ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
+                <span className="text-xs mr-0.5">A</span>
+                <span className="text-lg">A</span>
+              </span>
+            </button>
+            
+            {showFontSizeSlider && (
+              <div className="flex-1 flex items-center justify-between animate-fadeIn">
+                <button 
+                  onClick={() => currentFontSize > 1 && handleFontSizeChange(currentFontSize - 1)}
+                  className={`text-gray-500 dark:text-gray-400 text-sm font-medium mr-2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${currentFontSize === 1 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  disabled={currentFontSize === 1}
+                  aria-label="Decrease font size"
+                >
+                  −
+                </button>
+                <div className="flex-1 relative">
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    step="1"
+                    value={currentFontSize}
+                    onChange={(e) => handleFontSizeChange(parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-indigo-200 dark:bg-indigo-900/40 rounded-lg appearance-none cursor-pointer accent-indigo-600 dark:accent-indigo-400"
+                  />
+                  <div className="absolute top-3 left-0 right-0 flex justify-between px-0">
+                    {[1, 2, 3, 4].map((size) => (
+                      <div 
+                        key={size} 
+                        className={`h-2 w-2 rounded-full ${
+                          size <= currentFontSize 
+                            ? 'bg-indigo-600 dark:bg-indigo-400' 
+                            : 'bg-indigo-300 dark:bg-indigo-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => currentFontSize < 4 && handleFontSizeChange(currentFontSize + 1)}
+                  className={`text-gray-500 dark:text-gray-400 text-sm font-medium ml-2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${currentFontSize === 4 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  disabled={currentFontSize === 4}
+                  aria-label="Increase font size"
+                >
+                  +
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         
         <button
           onClick={toggleDarkMode}
@@ -85,85 +255,7 @@ export default function ArticleToolbar({
           )}
         </button>
         
-        <button
-          onClick={tts.toggleTTS}
-          disabled={tts.isLoading}
-          className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative ${tts.error ? 'text-red-500' : ''}`}
-          aria-label={tts.isPlaying ? "Pause text-to-speech" : "Play text-to-speech"}
-          title={tts.isPlaying ? "Pause text-to-speech" : (tts.error ? "Error: Try again" : "Play text-to-speech")}
-        >
-          {tts.isLoading ? (
-            <svg 
-              className="w-5 h-5 text-gray-600 dark:text-gray-300 animate-spin" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24" 
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-              />
-            </svg>
-          ) : tts.error ? (
-            <svg 
-              className="w-5 h-5 text-red-500" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24" 
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" 
-              />
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" 
-              />
-            </svg>
-          ) : tts.isPlaying ? (
-            <svg 
-              className="w-5 h-5 text-indigo-600 dark:text-indigo-400" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24" 
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" 
-              />
-            </svg>
-          ) : (
-            <svg 
-              className="w-5 h-5 text-gray-600 dark:text-gray-300" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24" 
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" 
-              />
-            </svg>
-          )}
-          
-          {tts.isPlaying && (
-            <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 rounded-full" style={{ width: `${tts.progress * 100}%` }}></div>
-          )}
-        </button>
+        {/* Text-to-speech button removed temporarily */}
         
         {originalUrl && (
           <a
@@ -189,6 +281,19 @@ export default function ArticleToolbar({
               />
             </svg>
           </a>
+        )}
+      </div>
+      
+      {/* Flag icon moved to right side */}
+      <div className="flex items-center">
+        {flagEmoji && (
+          <div
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+            aria-label={translationTitle}
+            title={translationTitle}
+          >
+            <span className="text-xl" role="img" aria-label={`Flag of ${regionName}`}>{flagEmoji}</span>
+          </div>
         )}
       </div>
       

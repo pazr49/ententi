@@ -16,11 +16,15 @@ interface ArticleReaderProps {
   isLoading?: boolean;
   originalUrl?: string;
   thumbnailUrl?: string;
+  translationInfo?: {
+    region?: string;
+    language?: string;
+  };
 }
 
-export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl }: ArticleReaderProps) {
+export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl, translationInfo }: ArticleReaderProps) {
   // UI state
-  const [fontSize, setFontSize] = useState<'text-base' | 'text-lg' | 'text-xl'>('text-base');
+  const [fontSize, setFontSize] = useState<'text-base' | 'text-lg' | 'text-xl' | 'text-2xl'>('text-base');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   
   // Article state
@@ -183,10 +187,16 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   };
 
   // Toolbar actions
-  const toggleFontSize = () => {
-    if (fontSize === 'text-base') setFontSize('text-lg');
-    else if (fontSize === 'text-lg') setFontSize('text-xl');
-    else setFontSize('text-base');
+  const toggleFontSize = (size: number) => {
+    // Map from size index (1-4) to text size class
+    const fontSizeMap = {
+      1: 'text-base',
+      2: 'text-lg',
+      3: 'text-xl',
+      4: 'text-2xl'
+    } as const;
+    
+    setFontSize(fontSizeMap[size as 1 | 2 | 3 | 4]);
   };
 
   const toggleDarkMode = () => {
@@ -203,9 +213,13 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
   // TTS player visibility
   useEffect(() => {
+    // Keep TTS functionality but disable automatic display
+    /*
     if (tts.isPlaying || tts.isLoading || (tts.duration > 0 && !tts.error)) {
       setShowTTSPlayer(true);
     }
+    */
+    setShowTTSPlayer(false); // Always keep the TTS player hidden for now
   }, [tts.isPlaying, tts.isLoading, tts.duration, tts.error]);
 
   const closeMediaPlayer = () => {
@@ -252,6 +266,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           toggleTTS
         }}
         originalUrl={originalUrl}
+        translationInfo={translationInfo}
       />
 
       {showTTSPlayer && (
@@ -284,7 +299,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
         
         <div className="relative" ref={articleContentRef}>
           <div 
-            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize === 'text-base' ? 'text-base' : fontSize === 'text-lg' ? 'text-lg' : 'text-xl'} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
+            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize === 'text-base' ? 'text-base' : fontSize === 'text-lg' ? 'text-lg' : fontSize === 'text-xl' ? 'text-xl' : 'text-2xl'} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
             dangerouslySetInnerHTML={{ __html: enhancedContentMemo || processedContent || article.content }}
             onClick={handleWordClick}
           />
@@ -358,11 +373,11 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       .article-content p {
         margin-bottom: 1.25rem;
         line-height: 1.8;
-        font-size: ${fontSize === 'text-base' ? '1rem' : fontSize === 'text-lg' ? '1.125rem' : '1.25rem'};
+        font-size: ${fontSize === 'text-base' ? '1rem' : fontSize === 'text-lg' ? '1.125rem' : fontSize === 'text-xl' ? '1.25rem' : '1.5rem'};
       }
       
       .article-content h2 {
-        font-size: 1.5rem;
+        font-size: ${fontSize === 'text-base' ? '1.5rem' : fontSize === 'text-lg' ? '1.65rem' : fontSize === 'text-xl' ? '1.75rem' : '2rem'};
         font-weight: 700;
         margin-top: 2.5rem;
         margin-bottom: 1rem;
@@ -371,7 +386,7 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       }
       
       .article-content h3 {
-        font-size: 1.25rem;
+        font-size: ${fontSize === 'text-base' ? '1.25rem' : fontSize === 'text-lg' ? '1.35rem' : fontSize === 'text-xl' ? '1.5rem' : '1.75rem'};
         font-weight: 600;
         margin-top: 2rem;
         margin-bottom: 0.75rem;
@@ -453,12 +468,31 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         border-radius: 3px;
       }
       
+      /* Custom animations */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .animate-fadeIn {
+        animation: fadeIn 0.2s ease-out forwards;
+      }
+      
+      /* Custom range slider styling */
       input[type="range"] {
         -webkit-appearance: none;
         appearance: none;
-        height: 8px;
+        height: 4px;
         border-radius: 4px;
         outline: none;
+        position: relative;
+        z-index: 10;
       }
       
       input[type="range"]::-webkit-slider-thumb {
@@ -470,6 +504,9 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        position: relative;
+        z-index: 20;
       }
       
       input[type="range"]::-moz-range-thumb {
@@ -480,6 +517,9 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        position: relative;
+        z-index: 20;
       }
       
       input[type="range"]::-webkit-slider-thumb:hover,

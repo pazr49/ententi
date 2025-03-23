@@ -159,7 +159,7 @@ body {
 }
 
 .hero-subtitle {
-  @apply text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto;
+  @apply text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-4 max-w-3xl mx-auto;
 }
 
 .hero-cta-container {

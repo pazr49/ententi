@@ -42,40 +42,42 @@ export default function UrlSubmitWrapper() {
     setIsSubmitting(true);
     
     try {
-      // If user is not authenticated, redirect to login
-      if (!user) {
-        // Store the URL in session storage to retrieve it after login
-        sessionStorage.setItem('pendingArticleUrl', formattedUrl);
-        router.push('/auth/login?returnUrl=/article');
-        return;
+      // Fetch article content to get title, etc.
+      const response = await fetch(`/api/article?url=${encodeURIComponent(formattedUrl)}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch article: ${response.status}`);
+      }
+      
+      const articleData: ReadableArticle = await response.json();
+
+      // Extract any images from article content using DOM parsing
+      let imageUrl: string | undefined = undefined;
+      try {
+        // Create a temporary DOM to extract the first image
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = articleData.content;
+        const firstImage = tempDiv.querySelector('img');
+        if (firstImage && firstImage.src) {
+          imageUrl = firstImage.src;
+        }
+      } catch (imgError) {
+        console.error('Error extracting image:', imgError);
       }
 
-      // First, fetch the article details from our API
-      try {
-        // Fetch article content to get title, etc.
-        const response = await fetch(`/api/article?url=${encodeURIComponent(formattedUrl)}`);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch article: ${response.status}`);
-        }
-        
-        const articleData: ReadableArticle = await response.json();
-
-        // Extract any images from article content using DOM parsing
-        let imageUrl: string | undefined = undefined;
+      // Store article data in session storage for both logged in and non-logged in users
+      if (typeof window !== 'undefined') {
         try {
-          // Create a temporary DOM to extract the first image
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = articleData.content;
-          const firstImage = tempDiv.querySelector('img');
-          if (firstImage && firstImage.src) {
-            imageUrl = firstImage.src;
-          }
-        } catch (imgError) {
-          console.error('Error extracting image:', imgError);
+          sessionStorage.setItem('currentArticle', JSON.stringify(articleData));
+          sessionStorage.setItem('currentArticleUrl', formattedUrl);
+        } catch (err) {
+          console.error('Error storing article in sessionStorage:', err);
         }
+      }
 
-        // Now create a more complete article object with actual data
+      // Only save to the user's saved articles if they are logged in
+      if (user) {
+        // Create a more complete article object with actual data
         const article: Article = {
           guid: encodeURIComponent(formattedUrl),
           title: articleData.title || 'Untitled Article',
@@ -89,42 +91,44 @@ export default function UrlSubmitWrapper() {
         
         // Save the article with complete data
         await saveArticle(article);
-        
-        // Store article data in session storage
-        if (typeof window !== 'undefined') {
-          try {
-            sessionStorage.setItem('currentArticle', JSON.stringify(articleData));
-            sessionStorage.setItem('currentArticleUrl', formattedUrl);
-          } catch (err) {
-            console.error('Error storing article in sessionStorage:', err);
-          }
-        }
-        
-        // Navigate to article reader
-        router.push(`/article?url=${encodeURIComponent(formattedUrl)}`);
-      } catch (apiError) {
-        console.error('Error fetching article details:', apiError);
-        
-        // Fallback to basic article data if API fails
-        const basicArticle: Article = {
-          guid: encodeURIComponent(formattedUrl),
-          title: 'Article from URL',
-          link: formattedUrl,
-          pubDate: new Date().toISOString(),
-          contentSnippet: 'Content not available. Please open the article to view.',
-          isoDate: new Date().toISOString(),
-        };
-        
-        // Save the basic article
-        await saveArticle(basicArticle);
-        
-        // Navigate to article reader
-        router.push(`/article?url=${encodeURIComponent(formattedUrl)}`);
       }
-    } catch (err) {
-      console.error('Error submitting URL:', err);
-      if (err instanceof Error) {
-        setError(err.message);
+      
+      // Navigate to article reader for both logged in and non-logged in users
+      router.push(`/article?url=${encodeURIComponent(formattedUrl)}`);
+    } catch (error) {
+      console.error('Error fetching article details:', error);
+      
+      // If user is logged in, save a basic version of the article
+      if (user) {
+        try {
+          // Fallback to basic article data if API fails
+          const basicArticle: Article = {
+            guid: encodeURIComponent(formattedUrl),
+            title: 'Article from URL',
+            link: formattedUrl,
+            pubDate: new Date().toISOString(),
+            contentSnippet: 'Content not available. Please open the article to view.',
+            isoDate: new Date().toISOString(),
+          };
+          
+          // Save the basic article
+          await saveArticle(basicArticle);
+        } catch (saveError) {
+          console.error('Error saving basic article:', saveError);
+        }
+      }
+      
+      // Try to navigate to article reader even if there were errors
+      try {
+        router.push(`/article?url=${encodeURIComponent(formattedUrl)}`);
+      } catch (navError) {
+        console.error('Error navigating to article reader:', navError);
+        // If everything fails, redirect to the original URL
+        window.location.href = formattedUrl;
+      }
+      
+      if (error instanceof Error) {
+        setError(error.message);
       } else {
         setError('An error occurred. Please try again.');
       }
@@ -136,7 +140,7 @@ export default function UrlSubmitWrapper() {
   return (
     <div className="w-full max-w-4xl mx-auto mt-8">
       <div className="text-center mb-4">
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-white">Paste any article URL to start reading</h3>
+        <h3 className="text-2xl font-bold text-indigo-800 dark:text-indigo-300">Paste any article URL to start reading!</h3>
       </div>
       
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
@@ -146,7 +150,7 @@ export default function UrlSubmitWrapper() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com/article"
-            className="w-full h-16 px-6 pr-12 rounded-xl border-2 border-indigo-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-200 focus:outline-none text-gray-700 text-lg shadow-md dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            className="w-full h-16 px-6 pr-12 rounded-xl border-2 border-indigo-500 ring-4 ring-indigo-200 focus:border-indigo-600 focus:ring-indigo-300 outline-none text-gray-700 text-lg shadow-md dark:bg-gray-800 dark:border-indigo-500 dark:ring-indigo-900/20 dark:text-white"
             disabled={isSubmitting}
             aria-label="Article URL"
           />
@@ -154,7 +158,7 @@ export default function UrlSubmitWrapper() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="h-16 px-10 text-lg font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-70 shadow-md"
+          className="h-16 px-10 text-lg font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 focus:outline-none ring-4 ring-indigo-300 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-70 shadow-lg hover:shadow-xl"
         >
           {isSubmitting ? 'Processing...' : 'Go'}
         </button>
