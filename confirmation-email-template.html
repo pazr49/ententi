@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Your Email</title>
+  <style>
+    /* Base styles for email clients */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f9fafb;
+      color: #1f2937;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .email-wrapper {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      background-color: #ffffff;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+    
+    .email-header {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      padding: 30px 20px;
+      text-align: center;
+    }
+    
+    .email-header h1 {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+    }
+    
+    .email-body {
+      padding: 40px 30px;
+      text-align: center;
+    }
+    
+    .email-body p {
+      margin: 0 0 20px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: #4b5563;
+    }
+    
+    .button {
+      display: inline-block;
+      background-color: #4f46e5;
+      color: #ffffff !important;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 12px 30px;
+      border-radius: 6px;
+      font-size: 16px;
+      margin: 20px 0;
+      box-shadow: 0 4px 6px rgba(79, 70, 229, 0.25);
+      transition: all 0.2s ease;
+    }
+    
+    .button:hover {
+      background-color: #4338ca;
+    }
+    
+    .email-footer {
+      background-color: #f9fafb;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
+    }
+    
+    .email-footer p {
+      margin: 0;
+    }
+    
+    .divider {
+      height: 1px;
+      background-color: #e5e7eb;
+      margin: 20px 0;
+    }
+    
+    .notice {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 30px;
+      text-align: center;
+    }
+
+    .logo {
+      width: 120px;
+      height: auto;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="email-wrapper">
+      <!-- Header with gradient background -->
+      <div class="email-header">
+        <!-- If you have a logo, uncomment this and add your logo URL -->
+        <!-- <img src="your-logo-url" alt="Logo" class="logo"> -->
+        <h1>Welcome to Ententi</h1>
+      </div>
+      
+      <!-- Email content -->
+      <div class="email-body">
+        <h2 style="color: #1f2937; font-size: 20px; margin-bottom: 20px;">Confirm Your Email Address</h2>
+        
+        <p>Thank you for signing up! To complete your registration and start your language learning journey, please confirm your email address.</p>
+        
+        <a href="{{ .ConfirmationURL }}" class="button">Confirm My Email</a>
+        
+        <p style="margin-top: 30px;">This link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+        
+        <div class="divider"></div>
+        
+        <p style="font-size: 15px; font-weight: 500; color: #4b5563;">Ready to enhance your reading and language skills?</p>
+        <p>Our platform helps you save articles and learn languages while reading content you love.</p>
+      </div>
+      
+      <!-- Email footer -->
+      <div class="email-footer">
+        <p>&copy; 2024 Ententi. All rights reserved.</p>
+        <p style="margin-top: 8px;">Helping you learn languages through reading</p>
+      </div>
+    </div>
+    
+    <!-- Fine print -->
+    <div class="notice">
+      <p>If the button above doesn't work, copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #4f46e5;">{{ .ConfirmationURL }}</p>
+    </div>
+  </div>
+</body>
+</html> 
