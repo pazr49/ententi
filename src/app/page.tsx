@@ -9,7 +9,7 @@ async function MultiFeeds() {
   
   return (
     <div className="article-feeds-container">
-      <h1 className="article-list-title">Or choose an article from the list below</h1>
+      <h1 className="article-list-title">Or choose from the list below</h1>
       <ClientWrapper serializedFeeds={JSON.stringify(allFeeds)} />
     </div>
   );
@@ -42,7 +42,7 @@ export default function Home() {
       <main className="pb-16">
         <Suspense fallback={
           <div className="article-feeds-container">
-            <h1 className="article-list-title">Or choose an article from the list below</h1>
+            <h1 className="article-list-title">Or choose from the list below</h1>
             <div className="animate-pulse">
               {/* Skeleton for multiple feeds */}
               {[...Array(2)].map((_, feedIndex) => (
