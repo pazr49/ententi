@@ -1,7 +1,7 @@
 'use client';
 
+import { ArticleList } from '@/components/articles';
 import { FeedItem } from '@/utils/rss';
-import ArticleList from './ArticleList';
 
 interface ClientArticlesProps {
   articles: FeedItem[];

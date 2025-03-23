@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getUserPreferences, saveUserPreferences as savePrefs } from '../utils/userPreferences';
+import { getUserPreferences, saveUserPreferences as savePrefs } from '@/utils/userPreferences';
 
 interface TranslationSettingsProps {
   onTranslate: (language: string, readingAge: string, region?: string) => Promise<void>;

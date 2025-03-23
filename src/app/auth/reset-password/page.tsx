@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import AuthForm from '@/components/AuthForm';
+import { AuthForm } from '@/components/auth';
 import { useAuth } from '@/context/AuthContext';
 
 export default function ResetPasswordPage() {

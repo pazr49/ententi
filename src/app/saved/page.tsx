@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useSavedArticles } from '@/context/SavedArticlesContext';
-import ArticleList from '@/components/ArticleList';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { ArticleList } from '@/components/articles';
+import { ProtectedRoute } from '@/components/auth';
 
 export default function SavedPage() {
   const { savedArticles, isLoading: contextLoading, connectionError, refreshArticles } = useSavedArticles();

@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { fetchMultipleFeeds } from '@/utils/rss';
 import { feeds } from '@/utils/feedConfig';
-import ClientWrapper from '@/components/ClientWrapper';
-import UrlSubmitWrapper from '@/components/UrlSubmitWrapper';
+import { ClientWrapper } from '@/components/feed';
+import { UrlSubmitWrapper } from '@/components/common';
 
 async function MultiFeeds() {
   const allFeeds = await fetchMultipleFeeds(feeds);

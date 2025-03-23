@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Feed } from '@/utils/rss';
-import ArticleCard from './ArticleCard';
+import { ArticleCard } from '@/components/articles';
 import Link from 'next/link';
 
 interface FeedRowProps {
