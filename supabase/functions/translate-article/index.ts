@@ -207,7 +207,7 @@ function chunkHtmlContent(html: string): string[] {
 // Function to translate HTML while preserving structure
 async function translateHtmlContent(
   html: string, 
-  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>, 
+  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
   targetLanguage: string, 
   readingLevel: string,
   dialectInfo: string = ""
@@ -219,12 +219,12 @@ async function translateHtmlContent(
   const chunks = chunkHtmlContent(html);
   console.log(`Split HTML into ${chunks.length} chunks`);
   
-  let translatedHtml = '';
+  let translatedHtmlResponse = ''; // Renamed to avoid redeclaration later if issue is scoping
   
   // Process each chunk
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-    const chunk = chunks[chunkIndex];
-    console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length}. Size: ${chunk.length} characters`);
+    const currentChunk = chunks[chunkIndex]; // Renamed to avoid redeclaration later if issue is scoping
+    console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length}. Size: ${currentChunk.length} characters`);
     
     // Extract text content for translation while preserving tags
     const tagMap: {[key: number]: string} = {};
@@ -235,15 +235,15 @@ async function translateHtmlContent(
     const TAG_SUFFIX = "!!!";
     
     // Replace tags with placeholders
-    for (let i = 0; i < chunk.length; i++) {
-      const char = chunk[i];
+    for (let i = 0; i < currentChunk.length; i++) {
+      const char = currentChunk[i];
       if (char === '<') {
         inTag = true;
         const tagStart = i;
-        while (i < chunk.length && chunk[i] !== '>') {
+        while (i < currentChunk.length && currentChunk[i] !== '>') {
           i++;
         }
-        const tag = chunk.substring(tagStart, i + 1);
+        const tag = currentChunk.substring(tagStart, i + 1);
         const placeholder = `${TAG_PREFIX}${tagIndex}${TAG_SUFFIX}`;
         tagMap[tagIndex] = tag;
         extractedText += placeholder;
@@ -296,7 +296,9 @@ async function translateHtmlContent(
       CRITICAL: Do NOT modify any placeholders like "${TAG_PREFIX}0${TAG_SUFFIX}", "${TAG_PREFIX}1${TAG_SUFFIX}", etc. 
       These are HTML tag placeholders and must remain exactly as they appear in the original text.
 
-      Return only the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.`;
+      Return only the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.
+
+      **CRITICAL: Do not use any markdown formatting (like backticks \`\`\` or asterisks \* for bold/italics) in your response. If formatting is needed (like bold or italics), rely solely on the existing HTML tags provided as placeholders (\`\${TAG_PREFIX}...\${TAG_SUFFIX}\`). Output \*only\* the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.**`;
       
       console.log(`Sending chunk to translation model...`);
       const response = await model.generateContent(prompt);
@@ -305,7 +307,7 @@ async function translateHtmlContent(
       
       if (translatedText === "") {
         console.error(`Received empty translation for chunk ${chunkIndex + 1}, using original chunk as fallback.`);
-        translatedText = chunk;
+        translatedText = currentChunk; // Use renamed variable
       }
       // Check if all tags are present in the response
       let missingTags = false;
@@ -317,26 +319,27 @@ async function translateHtmlContent(
         }
       }
       if (missingTags) {
-        console.log("Some tags are missing - using regex-based restoration");
-        translatedText = chunk;
-        translatedHtml += translatedText;
-        continue;
+        console.log("Some tags are missing - using original chunk as fallback"); // Updated log message
+        // If tags are missing, add the original chunk content directly
+        translatedHtmlResponse += currentChunk;
+        continue; // Skip rest of processing for this chunk
       }
+      // Restore HTML tags
       for (let i = 0; i < tagIndex; i++) {
         const placeholder = `${TAG_PREFIX}${i}${TAG_SUFFIX}`;
         translatedText = translatedText.replace(placeholder, tagMap[i]);
       }
-      translatedHtml += translatedText;
-      console.log(`Added translated chunk. Total translated HTML length so far: ${translatedHtml.length}`);
+      translatedHtmlResponse += translatedText; // Use renamed variable
+      console.log(`Added translated chunk. Total translated HTML length so far: ${translatedHtmlResponse.length}`);
     } catch (error) {
       console.error(`Error translating chunk ${chunkIndex + 1}:`, error);
       console.log(`Using original content for chunk ${chunkIndex + 1} due to error`);
-      translatedHtml += chunk;
+      translatedHtmlResponse += currentChunk; // Use renamed variable in case of error
     }
   }
   
-  console.log(`Translation complete. Final HTML length: ${translatedHtml.length}`);
-  return translatedHtml;
+  console.log(`Translation complete. Final HTML length: ${translatedHtmlResponse.length}`);
+  return translatedHtmlResponse; // Return renamed variable
 }
 
 // Function to handle image tags in HTML
@@ -444,7 +447,9 @@ serve(async (req: Request) => {
 
     Original title: "${articleContent.title}"
 
-    Return only the translated title without any additional text, explanations, or quotation marks.`;
+    Return only the translated title without any additional text, explanations, or quotation marks.
+
+    **CRITICAL: Do not use any markdown formatting (like backticks \`\`\` or asterisks \* for bold/italics) in your response. Output \*only\* the translated text.**`;
 
     const titleResponse = await model.generateContent(titlePrompt);
     const translatedTitle = titleResponse.response.text().trim();
@@ -456,7 +461,8 @@ serve(async (req: Request) => {
     
     // Translate the content while preserving HTML structure
     console.log(`Starting content translation...`);
-    let translatedHtml = await translateHtmlContent(
+    // Get the translated HTML content
+    const translatedHtmlResult = await translateHtmlContent(
       contentWithPreservedMedia,
       model,
       languageName,
@@ -464,18 +470,25 @@ serve(async (req: Request) => {
       dialectInfo
     );
 
+    // Declare a variable to hold the final content to be used
+    let finalContent: string;
+
     // Check if we got any content back
-    if (!translatedHtml || translatedHtml.trim() === '') {
+    if (!translatedHtmlResult || translatedHtmlResult.trim() === '') {
       console.error(`Translation returned empty content! Using original content as fallback.`);
-      translatedHtml = contentWithPreservedMedia;
+      // Assign original content if translation failed
+      finalContent = contentWithPreservedMedia; 
+    } else {
+      // Assign successful translation
+      finalContent = translatedHtmlResult;
     }
     
-    console.log(`Content translation complete. Length: ${translatedHtml.length} characters`);
+    console.log(`Content translation complete. Length: ${finalContent.length} characters`);
 
     // Extract plain text for the textContent field
     console.log(`Extracting plain text from translated HTML...`);
     // Simple regex approach to remove HTML tags for the plain text version
-    const translatedTextContent = translatedHtml
+    const translatedTextContent = finalContent // Use the final content
       .replace(/<[^>]*>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -486,7 +499,7 @@ serve(async (req: Request) => {
     const translatedArticle: TranslationResponse = {
       ...articleContent,
       title: translatedTitle,
-      content: translatedHtml,
+      content: finalContent, // Use the final content
       textContent: translatedTextContent,
       lang: targetLanguage,
     };

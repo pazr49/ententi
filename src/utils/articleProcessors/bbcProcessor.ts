@@ -204,6 +204,42 @@ export const bbcProcessor: ArticleProcessor = {
       }
     });
     
+    // --- Handle Pre-processed Video Placeholders --- 
+    console.log('BBC Processor: Looking for figure[data-caption] placeholders...');
+    const placeholders = tempDiv.querySelectorAll('figure[data-caption]');
+    console.log(`Found ${placeholders.length} video placeholders.`);
+
+    placeholders.forEach(prePlaceholder => {
+      const originalCaptionText = prePlaceholder.getAttribute('data-caption') || 'Video content';
+      const decodedCaption = originalCaptionText.replace(/&apos;/g, "'").replace(/&quot;/g, '"');
+
+      console.log(`Replacing placeholder with caption: "${decodedCaption}"`);
+
+      const finalPlaceholder = document.createElement('div'); // Use document here
+      finalPlaceholder.className = 'video-placeholder'; // Class for styling
+      
+      const message = document.createElement('p');
+      message.textContent = 'Embedded video content is not available in this view.';
+      finalPlaceholder.appendChild(message);
+      
+      const originalCaptionElement = document.createElement('p');
+      originalCaptionElement.style.fontSize = '0.9em';
+      originalCaptionElement.style.fontStyle = 'italic';
+      originalCaptionElement.textContent = `Original caption: "${decodedCaption}"`;
+      finalPlaceholder.appendChild(originalCaptionElement);
+
+      const link = document.createElement('a');
+      link.href = url; // Use the original article URL
+      link.textContent = 'View on original site';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      finalPlaceholder.appendChild(link);
+      
+      // Replace the figure placeholder with the final styled div
+      prePlaceholder.parentNode?.replaceChild(finalPlaceholder, prePlaceholder);
+    });
+    // --- End Video Placeholder Handling --- 
+    
     // Check if we need to add the hero image
     // First try to find if there's already a large image at the beginning of the content
     let hasHeroImage = false;

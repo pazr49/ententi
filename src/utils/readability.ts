@@ -20,27 +20,42 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
     const response = await fetch(url);
     const html = await response.text();
     
-    // Preprocess HTML for specific sites
-    let processedHtml = html;
-    
-    // Paul Graham's site has specific formatting
+    // --- Pre-process HTML to replace video blocks before Readability ---
+    let preprocessedHtml = html;
+    if (url.includes('bbc.co.uk') || url.includes('bbc.com')) {
+      console.log('Pre-processing BBC article for video blocks...');
+      // Regex to find the BBC video block and capture the caption inside
+      const videoBlockRegex = /<div data-component="video-block"[^>]*>.*?<figcaption[^>]*>(.*?)<\/figcaption>.*?<\/div>/gs;
+      preprocessedHtml = preprocessedHtml.replace(videoBlockRegex, (match, caption) => {
+        // Create a placeholder FIGURE tag, storing the caption in a data attribute
+        const encodedCaption = caption ? caption.trim().replace(/'/g, "&apos;").replace(/"/g, '&quot;') : 'Video'; // Basic encoding
+        console.log('Replacing video block with placeholder. Caption:', encodedCaption);
+        // Use a figure tag and add some text content to increase chances of preservation
+        return `<figure class="readability-video-placeholder" data-caption="${encodedCaption}">Video Placeholder</figure>`;
+      });
+    }
+    // --- End Video Pre-processing ---
+
+    // Original Preprocessing for specific sites (Paul Graham)
+    // We need to ensure this runs on the potentially modified preprocessedHtml
+    let siteSpecificProcessedHtml = preprocessedHtml; // Start with potentially video-processed HTML
     if (url.includes('paulgraham.com')) {
       console.log('Preprocessing Paul Graham article');
       
       // Paul Graham's articles often have very simple HTML structure
       // Let's make sure content is properly in the body
-      if (!processedHtml.includes('<body>') && !processedHtml.includes('<BODY>')) {
-        processedHtml = `<html><head><title></title></head><body>${processedHtml}</body></html>`;
+      if (!siteSpecificProcessedHtml.includes('<body>') && !siteSpecificProcessedHtml.includes('<BODY>')) {
+        siteSpecificProcessedHtml = `<html><head><title></title></head><body>${siteSpecificProcessedHtml}</body></html>`;
       }
       
       try {
         // Create a temporary DOM to work with
-        const tempDom = new JSDOM(processedHtml);
-        const tempDocument = tempDom.window.document;
+        const tempDomPG = new JSDOM(siteSpecificProcessedHtml);
+        const tempDocumentPG = tempDomPG.window.document;
         
         // First, clean up navigation elements and other unwanted parts
         // Remove navigation images (vertical and horizontal nav bars)
-        const navImages = tempDocument.querySelectorAll('img[src*="bel-7.gif"], img[src*="bel-8.gif"], img[usemap]');
+        const navImages = tempDocumentPG.querySelectorAll('img[src*="bel-7.gif"], img[src*="bel-8.gif"], img[usemap]');
         navImages.forEach(img => {
           // Try to remove the entire containing paragraph or parent element
           const parent = img.closest('p') || img.parentElement;
@@ -52,11 +67,11 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
         });
         
         // Remove map elements used for navigation
-        const maps = tempDocument.querySelectorAll('map');
+        const maps = tempDocumentPG.querySelectorAll('map');
         maps.forEach(map => map.remove());
         
         // Remove unnecessary links at the bottom that might be navigation
-        const links = tempDocument.querySelectorAll('a[href*="index.html"]');
+        const links = tempDocumentPG.querySelectorAll('a[href*="index.html"]');
         links.forEach(link => {
           const img = link.querySelector('img');
           if (img) {
@@ -71,7 +86,7 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
         });
         
         // Get the cleaned HTML
-        processedHtml = tempDocument.documentElement.outerHTML;
+        siteSpecificProcessedHtml = tempDocumentPG.documentElement.outerHTML;
       } catch (error) {
         console.error('Error cleaning up Paul Graham navigation:', error);
         // Continue with original HTML if cleanup fails
@@ -82,7 +97,7 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
       try {
         const tempDiv = new JSDOM('<!DOCTYPE html><div id="temp"></div>').window.document.getElementById('temp');
         if (tempDiv) {
-          tempDiv.innerHTML = processedHtml;
+          tempDiv.innerHTML = siteSpecificProcessedHtml;
           
           // First, find text nodes separated by <br><br>
           const processParagraphs = (node: Node) => {
@@ -144,7 +159,7 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
             }
           });
           
-          processedHtml = tempDiv.innerHTML;
+          siteSpecificProcessedHtml = tempDiv.innerHTML;
         }
       } catch (error) {
         console.error('Error preprocessing Paul Graham article:', error);
@@ -152,8 +167,8 @@ export async function fetchAndParseArticle(url: string): Promise<ReadableArticle
       }
     }
     
-    // Parse the HTML with JSDOM
-    const dom = new JSDOM(processedHtml, { url });
+    // Parse the HTML with JSDOM (use the result of all pre-processing)
+    const dom = new JSDOM(siteSpecificProcessedHtml, { url });
     
     // For Paul Graham's site, do additional preprocessing
     if (url.includes('paulgraham.com')) {

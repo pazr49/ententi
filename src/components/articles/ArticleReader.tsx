@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ReadableArticle } from '@/utils/readability';
 import { processArticle } from '@/utils/articleProcessors';
-import { WordPopup, type PopupPosition } from '@/components/articles';
+import { WordPopup } from '@/components/articles';
 import { useEnhancedContent } from '@/hooks/useEnhancedContent';
 import { useTTS } from '@/hooks/useTTS';
 import ArticleToolbar from './ArticleReader/ArticleToolbar';
@@ -35,7 +35,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   
   // Word selection state
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [popupPosition, setPopupPosition] = useState<PopupPosition | null>(null);
   const [currentSentence, setCurrentSentence] = useState<string>('');
   
   // Refs
@@ -142,12 +141,17 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
   // Handle clicks outside the word popup
   useEffect(() => {
+    // Function to close the popup
+    const closePopup = () => {
+      setSelectedWord(null);
+      setCurrentSentence('');
+    };
+
     const handleDocumentClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!articleContentRef.current?.contains(target) && !target.closest('.word-popup') && selectedWord) {
-        setSelectedWord(null);
-        setPopupPosition(null);
-        setCurrentSentence('');
+      // Close if clicking outside the popup itself (WordPopup now handles its own internal clicks)
+      if (selectedWord && !target.closest('.word-popup')) {
+        closePopup();
       }
     };
     document.addEventListener('click', handleDocumentClick);
@@ -170,19 +174,9 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
       
       const sentence = extractSentence(target, word);
       
-      if (articleContentRef.current) {
-        const containerRect = articleContentRef.current.getBoundingClientRect();
-        setSelectedWord(word);
-        setCurrentSentence(sentence);
-        setPopupPosition({
-          x: wordRect.left - containerRect.left + wordRect.width / 2,
-          y: wordRect.top - containerRect.top
-        });
-      }
-    } else if (!target.closest('.word-popup') && selectedWord) {
-      setSelectedWord(null);
-      setPopupPosition(null);
-      setCurrentSentence('');
+      // Set the word and sentence to show the popup
+      setSelectedWord(word);
+      setCurrentSentence(sentence);
     }
   };
 
@@ -227,6 +221,12 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
       tts.pause();
     }
     setShowTTSPlayer(false);
+  };
+
+  // Function to close the popup, passed to WordPopup
+  const closePopup = () => {
+    setSelectedWord(null);
+    setCurrentSentence('');
   };
 
   // Loading state
@@ -303,13 +303,12 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             dangerouslySetInnerHTML={{ __html: enhancedContentMemo || processedContent || article.content }}
             onClick={handleWordClick}
           />
-          {selectedWord && popupPosition && (
-            <WordPopup 
-              word={selectedWord}
-              position={popupPosition}
-              sentence={currentSentence}
-            />
-          )}
+          {/* WordPopup is now always rendered, controls its own visibility/animation via 'word' prop */}
+          <WordPopup 
+            word={selectedWord} // Pass null to hide/animate out
+            sentence={currentSentence}
+            onClose={closePopup} // Pass the close handler
+          />
         </div>
         
         {isPaulGrahamArticle && !processedContent && (
@@ -360,6 +359,12 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       
       .article-content figure {
         margin: 1.5rem 0;
+        /* position: relative; */ /* Remove relative positioning from figure */
+      }
+      
+      /* Add relative positioning to the image block div */
+      .article-content figure div[data-component="image-block"] {
+        position: relative;
       }
       
       .article-content img {
@@ -533,6 +538,44 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+
+      /* Style for video placeholders */
+      .video-placeholder {
+        border: 1px dashed ${isDarkMode ? '#4b5563' : '#d1d5db'}; /* Use theme colors */
+        background-color: ${isDarkMode ? '#1f2937' : '#f9fafb'}; /* Use theme colors */
+        padding: 1.25rem; /* ~20px */
+        margin: 2em 0;
+        text-align: center;
+        font-size: 0.9em; /* Slightly smaller */
+        color: ${isDarkMode ? '#9ca3af' : '#6b7280'}; /* Use theme colors */
+        border-radius: 0.375rem; /* Add some rounding */
+      }
+
+      .video-placeholder p {
+        margin-bottom: 0.625rem; /* ~10px */
+        line-height: 1.5; /* Adjust line height for placeholder */
+      }
+
+      .video-placeholder a {
+        color: ${isDarkMode ? '#93c5fd' : '#3b82f6'}; /* Match link color */
+        font-weight: 500;
+      }
+
+      /* Style for image credits (e.g., Craig Blake) */
+      .article-content figure div[data-component="image-block"] p span {
+        position: absolute;
+        bottom: 0.5rem; /* Adjust as needed */
+        right: 0.5rem; /* Adjust as needed */
+        background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black */
+        color: white;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem; /* Smaller font size */
+        border-radius: 0.25rem;
+        z-index: 10; /* Ensure it's above the image */
+        max-width: 50%; /* Prevent very long credits from taking too much space */
+        text-align: right;
+        line-height: 1.2;
       }
     `}</style>
   );
