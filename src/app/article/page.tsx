@@ -70,22 +70,8 @@ function ArticleContent() {
     }
   }, [translatedArticle, isTranslating]);
 
-  // Handle translation
-  const handleTranslate = async (language: string, readingAge: string, region?: string) => {
-    if (!article) return;
-    
-    // Store info for when translation completes, but don't set state yet
-    pendingTranslationRef.current = { language, region };
-    
-    // Clear current translation info at the start of a new translation
-    setTranslationLanguage(undefined);
-    setTranslationRegion(undefined);
-    
-    await translate(article, language, readingAge, region);
-  };
-
-  // Determine which article content to show
-  const displayArticle = translatedArticle || article;
+  // Determine which article content to show - Use original article directly
+  // const displayArticle = translatedArticle || article;
 
   return (
     <div className="article-page-container px-4 py-8">
@@ -96,24 +82,12 @@ function ArticleContent() {
         translationError={translationError}
       />
       
-      {/* Translation settings */}
-      {displayArticle && (
-        <TranslationSettings 
-          onTranslate={handleTranslate}
-          isTranslating={isTranslating}
-          onCancel={cancelTranslation}
-        />
-      )}
-      
-      {/* Main article content */}
-      {displayArticle && (
+      {/* Main article content - Pass the original article */}
+      {article && (
         <ArticleReader 
-          article={displayArticle} 
+          article={article}
+          isLoading={isLoading}
           originalUrl={url || undefined}
-          translationInfo={translatedArticle ? {
-            region: translationRegion,
-            language: translationLanguage
-          } : undefined}
         />
       )}
     </div>
@@ -123,7 +97,7 @@ function ArticleContent() {
 // Wrap with suspense boundary
 export default function ArticlePage() {
   return (
-    <Suspense fallback={<div></div>}>
+    <Suspense fallback={<div>Loading article...</div>}>
       <ArticleContent />
     </Suspense>
   );

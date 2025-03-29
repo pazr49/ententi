@@ -23,6 +23,9 @@ export const bbcProcessor: ArticleProcessor = {
     // First remove common unwanted elements
     removeCommonUnwantedElements(tempDiv);
     
+    // --- Add Logging: Figure count after common removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count after common removal: ${tempDiv.querySelectorAll('figure').length}`);
+    
     // Extract author image
     let authorImage: string | null = null;
     
@@ -48,12 +51,21 @@ export const bbcProcessor: ArticleProcessor = {
     const socialElements = tempDiv.querySelectorAll('.share, [data-component="share-tools"], .social-embed');
     socialElements.forEach(el => el.remove());
     
+    // --- Add Logging: Figure count after social removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count after social removal: ${tempDiv.querySelectorAll('figure').length}`);
+    
     // Remove article promos and recommendations
     const promoElements = tempDiv.querySelectorAll('[data-component="links-block"], [data-component="tag-list"], [data-component="see-alsos"]');
     promoElements.forEach(el => el.remove());
     
+    // --- Add Logging: Figure count after promo removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count after promo removal: ${tempDiv.querySelectorAll('figure').length}`);
+    
     // DEBUG: Log the HTML before cleaning bylines
-    console.log("Before byline removal - first 500 chars:", tempDiv.innerHTML.substring(0, 500) + "...");
+    console.log("[BBC_PROCESSOR] Before byline removal - first 500 chars:", tempDiv.innerHTML.substring(0, 500) + "...");
+    
+    // --- Add Logging: Figure count BEFORE byline removal attempts ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count BEFORE byline removal: ${tempDiv.querySelectorAll('figure').length}`);
     
     // NUCLEAR OPTION: DIRECT HTML STRING REPLACEMENT
     // This is the most extreme approach when DOM manipulation fails
@@ -97,6 +109,9 @@ export const bbcProcessor: ArticleProcessor = {
     // Apply the cleaned HTML back to the DOM
     tempDiv.innerHTML = htmlContent;
 
+    // --- Add Logging: Figure count AFTER regex byline removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER regex byline removal: ${tempDiv.querySelectorAll('figure').length}`);
+
     // NEW STEP: Direct removal of divs with data-component="byline-block"
     const bylineBlockEls = tempDiv.querySelectorAll('div[data-component="byline-block"]');
     console.log("Direct removal of byline-block elements: Found", bylineBlockEls.length);
@@ -104,6 +119,9 @@ export const bbcProcessor: ArticleProcessor = {
       console.log("Directly removing byline-block element:", el.outerHTML.substring(0, 100) + "...");
       el.remove();
     });
+
+    // --- Add Logging: Figure count AFTER direct 'byline-block' div removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER direct 'byline-block' div removal: ${tempDiv.querySelectorAll('figure').length}`);
 
     // Continue with the existing approaches as fallbacks
     // NEW DIRECT STRING MATCHING APPROACH - Look for the exact structure in HTML
@@ -132,6 +150,9 @@ export const bbcProcessor: ArticleProcessor = {
       });
     }
 
+    // --- Add Logging: Figure count AFTER direct HTML attribute matching removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER direct HTML attribute matching removal: ${tempDiv.querySelectorAll('figure').length}`);
+
     // REMAINING AGGRESSIVE APPROACHES
     // AGGRESSIVE BYLINE REMOVAL - First direct approach for exact matches
     const exactBylineElements = tempDiv.querySelectorAll('div[data-testid="byline-new"][data-component="byline-block"]');
@@ -140,6 +161,9 @@ export const bbcProcessor: ArticleProcessor = {
       console.log("Removing exact byline match:", el.outerHTML.substring(0, 100) + "...");
       el.remove();
     });
+
+    // --- Add Logging: Figure count AFTER exact byline selector removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER exact byline selector removal: ${tempDiv.querySelectorAll('figure').length}`);
 
     // Second approach - any element with either byline attribute
     const bylineElements = tempDiv.querySelectorAll(
@@ -163,6 +187,9 @@ export const bbcProcessor: ArticleProcessor = {
       console.log("Removing byline:", el.outerHTML.substring(0, 100) + "...");
       el.remove();
     });
+
+    // --- Add Logging: Figure count AFTER general byline selector removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER general byline selector removal: ${tempDiv.querySelectorAll('figure').length}`);
 
     // Third approach - target by content and structure
     // Find all divs that contain the reporter/author information
@@ -189,6 +216,9 @@ export const bbcProcessor: ArticleProcessor = {
       }
     });
 
+    // --- Add Logging: Figure count AFTER content-based byline removal ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER content-based byline removal: ${tempDiv.querySelectorAll('figure').length}`);
+
     // Additional cleanup for any article-word spans containing author names or roles
     const wordSpans = tempDiv.querySelectorAll('.article-word, .processed-for-words span');
     wordSpans.forEach(span => {
@@ -203,6 +233,9 @@ export const bbcProcessor: ArticleProcessor = {
         }
       }
     });
+
+    // --- Add Logging: Figure count AFTER word span cleanup ---
+    console.log(`[BBC_PROCESSOR_DEBUG] Figure count AFTER word span cleanup: ${tempDiv.querySelectorAll('figure').length}`);
     
     // --- Handle Pre-processed Video Placeholders --- 
     console.log('BBC Processor: Looking for figure[data-caption] placeholders...');

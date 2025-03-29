@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/context/AuthContext";
-import { Navbar } from "@/components/layout";
-import { SavedArticlesProvider } from "@/context/SavedArticlesContext";
+import Providers from "@/components/layout/Providers";
 import { Geist, Geist_Mono } from "next/font/google";
 
 const geistSans = Geist({
@@ -33,14 +31,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <SavedArticlesProvider>
-            <Navbar />
-            <main className="min-h-screen pt-16">
-              {children}
-            </main>
-          </SavedArticlesProvider>
-        </AuthProvider>
+        <Providers>
+          <main className="min-h-screen pt-16">
+            {children}
+          </main>
+        </Providers>
       </body>
     </html>
   );

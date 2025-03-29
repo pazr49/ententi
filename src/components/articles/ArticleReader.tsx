@@ -10,28 +10,37 @@ import ArticleToolbar from './ArticleReader/ArticleToolbar';
 import ArticleMeta from './ArticleReader/ArticleMeta';
 import TTSPlayer from './ArticleReader/TTSPlayer';
 import { extractArticleText } from './ArticleReader/utils';
+import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
+import TranslationSettings from '@/components/ui/TranslationSettings';
+
+interface StreamChunk {
+  metadata?: {
+    title?: string;
+    lang?: string;
+  };
+  contentChunk?: string;
+  error?: string;
+  details?: string;
+  preservedRef?: string;
+}
 
 interface ArticleReaderProps {
   article: ReadableArticle;
   isLoading?: boolean;
   originalUrl?: string;
   thumbnailUrl?: string;
-  translationInfo?: {
-    region?: string;
-    language?: string;
-  };
 }
 
-export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl, translationInfo }: ArticleReaderProps) {
+export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl }: ArticleReaderProps) {
   // UI state
   const [fontSize, setFontSize] = useState<'text-base' | 'text-lg' | 'text-xl' | 'text-2xl'>('text-base');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   
   // Article state
-  const [processedContent, setProcessedContent] = useState<string>('');
   const [publishDate, setPublishDate] = useState<string | null>(null);
   const [isPaulGrahamArticle, setIsPaulGrahamArticle] = useState<boolean>(false);
   const [authorImage, setAuthorImage] = useState<string | null>(null);
+  const [initialProcessedContent, setInitialProcessedContent] = useState<string>('');
   
   // Word selection state
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -39,19 +48,25 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   
   // Refs
   const articleContentRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
+  // Supabase context
+  const supabase = useSupabaseClient();
+  const user = useUser();
+
   // TTS hook
   const tts = useTTS({ 
-    text: extractArticleText(processedContent || article?.content || ''),
+    text: extractArticleText(article?.content || ''),
   });
 
   const [showTTSPlayer, setShowTTSPlayer] = useState<boolean>(false);
 
-  // Reset states when article changes
-  useEffect(() => {
-    setProcessedContent('');
-    setAuthorImage(null);
-  }, [article?.title]);
+  // Streaming/Translation state
+  const [streamedTitle, setStreamedTitle] = useState<string>('');
+  const [streamedLang, setStreamedLang] = useState<string | undefined>(undefined);
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [finalStreamedContent, setFinalStreamedContent] = useState<string>('');
+  const [translationError, setTranslationError] = useState<string | null>(null);
 
   // Detect Paul Graham articles
   useEffect(() => {
@@ -62,46 +77,50 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
   // Process article content
   useEffect(() => {
-    if (article && article.content) {
-      console.log("Processing article content in ArticleReader", { 
-        title: article.title,
-        contentLength: article.content.length,
-        originalUrl: originalUrl,
-        thumbnailUrl: thumbnailUrl
-      });
+    if (article?.publishedTime && !publishDate) {
       try {
-        const processed = processArticle(originalUrl, article, thumbnailUrl);
-        setProcessedContent(processed.processedContent);
-        if (processed.authorImage) {
-          setAuthorImage(processed.authorImage);
-        }
-        if (processed.publishDate) {
-          setPublishDate(processed.publishDate);
-        } else if (article.publishedTime) {
-          try {
-            const date = new Date(article.publishedTime);
-            setPublishDate(date.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            }));
-          } catch (e) {
-            console.error('Error parsing date:', e);
-            setPublishDate(article.publishedTime);
-          }
-        }
+        const date = new Date(article.publishedTime);
+        setPublishDate(date.toLocaleDateString('en-US', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        }));
       } catch (e) {
-        console.error('Error processing article content:', e);
-        setProcessedContent(article.content);
+        console.error('Error parsing date:', e);
+        setPublishDate(article.publishedTime);
       }
     }
-  }, [article, originalUrl, thumbnailUrl]);
+  }, [article?.publishedTime, publishDate]);
+
+  // --- ADDED: useEffect to process initial article content ---
+  useEffect(() => {
+    if (article && article.content && !finalStreamedContent) { // Only run if we have an article and aren't already showing translated content
+      console.log("[ArticleReader useEffect] Processing initial article content for display...");
+      try {
+        const processed = processArticle(originalUrl, article, thumbnailUrl);
+        setInitialProcessedContent(processed.processedContent);
+        // Set author image and date if not already set or handled elsewhere
+        if (processed.authorImage && !authorImage) {
+          setAuthorImage(processed.authorImage);
+        }
+        if (processed.publishDate && !publishDate) {
+          setPublishDate(processed.publishDate);
+        }
+        console.log("[ArticleReader useEffect] Initial processed content set.");
+      } catch (e) {
+        console.error('Error processing initial article content:', e);
+        setInitialProcessedContent(article.content); // Fallback to raw content on error
+      }
+    }
+    // Clear initial processed content if article is removed (e.g., navigating away)
+    return () => {
+      if (!article) {
+         setInitialProcessedContent('');
+      }
+    }
+  }, [article, originalUrl, thumbnailUrl, finalStreamedContent, authorImage, publishDate]); // Rerun if article changes or translation finishes
 
   // Memoize the enhanced content
-  const enhancedContentMemo = useEnhancedContent(processedContent);
+  const finalEnhancedContentMemo = useEnhancedContent(finalStreamedContent);
+  const initialEnhancedContentMemo = useEnhancedContent(initialProcessedContent); // Memoize initial content too
 
   // Extract sentence containing selected word
   const extractSentence = (element: HTMLElement, targetWord: string): string => {
@@ -166,7 +185,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     if (target.classList.contains('article-word')) {
       e.stopPropagation();
       const word = target.textContent || '';
-      const wordRect = target.getBoundingClientRect();
       
       if (selectedWord === word) {
         return;
@@ -229,6 +247,326 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     setCurrentSentence('');
   };
 
+  // --- NEW: Function to parse and store preserved nodes ---
+  const parseAndStorePreservedNodes = (htmlContent: string): Map<string, string> => {
+    console.log("[FRONTEND_PREPARSE] Starting to parse original HTML for preserved nodes...");
+    const map = new Map<string, string>();
+    if (!htmlContent) return map;
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+      if (!doc || !doc.body) {
+          console.warn("[FRONTEND_PREPARSE] Failed to parse document body.");
+          return map;
+      }
+      
+      // --- MODIFIED LOGIC: Iterate directly through BODY children --- 
+      const bodyElement = doc.body;
+      if (!bodyElement) {
+          console.warn("[FRONTEND_PREPARSE] Document body not found after parsing.");
+          return map;
+      }
+
+      console.log(`[FRONTEND_PREPARSE] Iterating through childNodes of <BODY>...`);
+      let preservedNodeIndex = 0; // Reset index here
+
+      // Iterate through the BODY's direct children
+      bodyElement.childNodes.forEach((node: globalThis.Node, index: number) => {
+         // Focus only on ELEMENT nodes
+         if (node.nodeType === Node.ELEMENT_NODE) {
+             const element = node as Element;
+             const tagName = element.tagName.toLowerCase();
+             // --- ADDED CHECK: Handle the main readability div --- 
+             // If we encounter the main div (e.g., #readability-page-1), 
+             // we need to look *inside* it as well, because figures might be siblings
+             // OR content might be directly inside.
+             if (tagName === 'div' && element.id.startsWith('readability-page-')) {
+                 console.log(`[FRONTEND_PREPARSE] Found main container <div id='${element.id}'> at body level ${index + 1}. Processing its children...`);
+                 // Iterate through the children of THIS div
+                 element.childNodes.forEach((innerNode: globalThis.Node, innerIndex: number) => {
+                     if (innerNode.nodeType === Node.ELEMENT_NODE) {
+                         const innerElement = innerNode as Element;
+                         const innerTagName = innerElement.tagName.toLowerCase();
+                         const innerOuterHTML = innerElement.outerHTML;
+                         const innerShortHTML = innerOuterHTML?.substring(0, 100).replace(/\n/g, '') + (innerOuterHTML?.length > 100 ? '...' : '');
+
+                         if (!innerOuterHTML || !innerOuterHTML.trim()) return; // Skip empty
+                         
+                         // Check if the INNER element is preservable
+                         if (innerTagName === 'figure' || innerTagName === 'img' || (innerTagName === 'div' && innerElement.classList.contains('video-placeholder'))) {
+                             const key = `preserved-${preservedNodeIndex}`;
+                             console.log(`[FRONTEND_PREPARSE] Storing PRESERVED node inside container (index ${innerIndex + 1}) with key '${key}': ${innerShortHTML}`);
+                             map.set(key, innerOuterHTML);
+                             preservedNodeIndex++;
+                         } else {
+                             // If it's an <article> or <main> inside the div, process its children too (recursive step)
+                             if (['article', 'main'].includes(innerTagName)) {
+                                 console.log(`[FRONTEND_PREPARSE] Found <${innerTagName}> inside container. Processing its children...`);
+                                 innerElement.childNodes.forEach((articleNode: globalThis.Node, articleIndex: number) => {
+                                     if (articleNode.nodeType === Node.ELEMENT_NODE) {
+                                         const articleElement = articleNode as Element;
+                                         const articleTagName = articleElement.tagName.toLowerCase();
+                                         const articleOuterHTML = articleElement.outerHTML;
+                                         const articleShortHTML = articleOuterHTML?.substring(0, 100).replace(/\n/g, '') + (articleOuterHTML?.length > 100 ? '...' : '');
+
+                                         if (!articleOuterHTML || !articleOuterHTML.trim()) return; // Skip empty
+                                         
+                                         if (articleTagName === 'figure' || articleTagName === 'img' || (articleTagName === 'div' && articleElement.classList.contains('video-placeholder'))) {
+                                             const key = `preserved-${preservedNodeIndex}`;
+                                             console.log(`[FRONTEND_PREPARSE] Storing PRESERVED node inside <${innerTagName}> (index ${articleIndex + 1}) with key '${key}': ${articleShortHTML}`);
+                                             map.set(key, articleOuterHTML);
+                                             preservedNodeIndex++;
+                                         } else {
+                                             console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE node inside <${innerTagName}> (index ${articleIndex + 1}, tag: ${articleTagName})`);
+                                         }
+                                     }
+                                 });
+                             } else {
+                                console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE node inside container (index ${innerIndex + 1}, tag: ${innerTagName})`);
+                             }
+                         }
+                     }
+                 });
+                 // Skip processing the div itself further down
+                 return; 
+             }
+             
+             // --- Original Check for top-level elements (like figures that are siblings to the main div) ---
+             const outerHTML = element.outerHTML;
+             const shortHTML = outerHTML?.substring(0, 100).replace(/\n/g, '') + (outerHTML?.length > 100 ? '...' : '');
+
+             if (!outerHTML || !outerHTML.trim()) return; // Skip empty
+
+             // Identify preserved elements at the BODY level
+             if (tagName === 'figure' || tagName === 'img' || (tagName === 'div' && element.classList.contains('video-placeholder'))) {
+                 const key = `preserved-${preservedNodeIndex}`;
+                 console.log(`[FRONTEND_PREPARSE] Storing PRESERVED body-level node ${index+1} with key '${key}': ${shortHTML}`);
+                 map.set(key, outerHTML);
+                 preservedNodeIndex++;
+             } else {
+                 console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE body-level node ${index+1} (tag: ${tagName})`);
+             }
+         } else if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+             const shortText = node.textContent.trim().substring(0,50) + (node.textContent.trim().length > 50 ? '...' : '');
+             console.log(`[FRONTEND_PREPARSE] Skipping TEXT body-level node ${index+1}: "${shortText}"`);
+         } else {
+              const skippedTagName = (node as Element).tagName?.toLowerCase() || 'N/A';
+              console.log(`[FRONTEND_PREPARSE] Skipping OTHER body-level node ${index+1} (type: ${node.nodeType}, tag: ${skippedTagName})`);
+         }
+      });
+      console.log(`[FRONTEND_PREPARSE] Finished parsing. Stored ${map.size} preserved nodes locally.`);
+    } catch (error) {
+       console.error("[FRONTEND_PREPARSE] Error parsing original HTML:", error);
+    }
+    return map;
+  };
+
+  // --- UPDATED: Handle Real Translation --- 
+  const handleRealTranslate = async (language: string, readingAge: string, region?: string) => {
+    // Check if article content exists
+    if (!article || !article.content || isStreaming) return; 
+
+    // --- PROCESS ARTICLE CONTENT HERE --- 
+    let contentToTranslate = article.content;
+    let processedAuthorImage = null; // Keep track of author image from processing
+    try {
+      console.log("[handleRealTranslate] Processing article content...");
+      const processed = processArticle(originalUrl, article, thumbnailUrl);
+      contentToTranslate = processed.processedContent;
+      processedAuthorImage = processed.authorImage; // Store processed author image
+      // Update author image state if not already set or different
+      if (processedAuthorImage && processedAuthorImage !== authorImage) {
+          setAuthorImage(processedAuthorImage);
+      }
+      // Note: Date is handled by the separate useEffect now
+      console.log("[handleRealTranslate] Content after processing (first 500 chars):", contentToTranslate.substring(0, 500));
+    } catch (e) {
+      console.error('Error processing article content in handleRealTranslate:', e);
+      // Decide if we should proceed with raw content or stop
+      // contentToTranslate = article.content; // Option: Fallback to raw content
+      setTranslationError("Failed to pre-process article content before translation.");
+      return; // Stop translation if processing fails
+    }
+    // --- END PROCESSING --- 
+
+    // Now proceed with translation using the processed contentToTranslate
+    if (!contentToTranslate) {
+        console.error("[handleRealTranslate] Processed content is empty, stopping translation.");
+        setTranslationError("Article content became empty after processing.");
+        return;
+    }
+    
+    console.log(`[FRONTEND] Starting translation to ${language} (${readingAge}), region: ${region || 'default'}`);
+    // Log is redundant now as we process right above
+    // console.log(`[FRONTEND] Using content source: processedContent`); 
+    setIsStreaming(true);
+    setTranslationError(null);
+    // Set finalStreamedContent to empty, ready for new stream
+    setFinalStreamedContent(''); 
+    setStreamedTitle(''); 
+    setStreamedLang(undefined);
+
+    // --- Pre-parse using the content just processed --- 
+    console.log(`[FRONTEND] Content about to be pre-parsed (first 500 chars):`, contentToTranslate.substring(0, 500));
+    const localPreservedMap = parseAndStorePreservedNodes(contentToTranslate);
+    if (localPreservedMap.size === 0) {
+      console.warn("[FRONTEND] No preserved nodes found during pre-parsing."); 
+    }
+    
+    // Cancel previous request if any
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+
+      // Define API endpoint URL (replace with your actual URL if different)
+      const apiUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/translate-article`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include Authorization header if user is logged in
+          ...(token && { Authorization: `Bearer ${token}` }), 
+        },
+        body: JSON.stringify({
+          articleContent: {
+            title: article.title,
+            // --- UPDATED: Send the processed content --- 
+            content: contentToTranslate, 
+            textContent: article.textContent, // textContent likely doesn't change with processing, but could be reviewed
+            // Include other relevant fields if needed by the function
+            excerpt: article.excerpt,
+            byline: article.byline,
+            siteName: article.siteName,
+            lang: article.lang,
+            publishedTime: article.publishedTime,
+          },
+          targetLanguage: language,
+          readingAge: readingAge, // Use the value directly from settings
+          region: region,
+        }),
+        signal: abortControllerRef.current.signal, // Attach signal for cancellation
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      console.log("[FRONTEND] Received response, starting stream processing."); // Log stream start
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let receivedChunkCount = 0; // Counter for chunks
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log("[FRONTEND] Stream finished."); // Log stream end
+          if (buffer.trim()) {
+             console.warn("[FRONTEND] Stream ended with non-empty, non-parsed buffer:", buffer);
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+          const lineToProcess = buffer.substring(0, newlineIndex);
+          buffer = buffer.substring(newlineIndex + 1); 
+
+          if (!lineToProcess.trim()) continue; 
+          
+          receivedChunkCount++;
+          console.log(`[FRONTEND] Processing Line ${receivedChunkCount} from buffer:`, lineToProcess.substring(0, 150)); 
+
+          // Attempt to parse as JSON
+          try {
+            const chunk: StreamChunk = JSON.parse(lineToProcess);
+            console.log(`[FRONTEND] Parsed Full Chunk ${receivedChunkCount}:`, chunk);
+            
+            if (chunk.error) {
+              console.error('[FRONTEND] Error chunk received:', chunk.details || chunk.error);
+              setTranslationError(chunk.details || chunk.error);
+              continue; 
+            }
+
+            if (chunk.metadata?.title) {
+              console.log(`[FRONTEND] Setting title: ${chunk.metadata.title}`);
+              setStreamedTitle(chunk.metadata.title);
+            }
+            if (chunk.metadata?.lang) {
+              console.log(`[FRONTEND] Setting lang: ${chunk.metadata.lang}`);
+              setStreamedLang(chunk.metadata.lang);
+            }
+
+            // --- UPDATED: Check for preserved node reference using local map ---
+            if (typeof chunk.preservedRef === 'string') {
+              const refKey = chunk.preservedRef;
+              // Use the local map directly
+              const preservedHtml = localPreservedMap.get(refKey); 
+              if (preservedHtml) {
+                console.log(`[FRONTEND] Appending PRESERVED chunk ${receivedChunkCount} using ref '${refKey}'. HTML: ${preservedHtml.substring(0,100)}...`);
+                setFinalStreamedContent(prev => prev + preservedHtml);
+              } else {
+                console.error(`[FRONTEND] Error: Received preservedRef '${refKey}' but no matching HTML found in local map!`);
+                setFinalStreamedContent(prev => prev + `<!-- ERROR: Preserved content for ${refKey} not found -->`);
+              }
+            } else if (typeof chunk.contentChunk === 'string') {
+              // Handle translated text chunks
+              console.log(`[FRONTEND] Appending translated JSON chunk ${receivedChunkCount}: ${chunk.contentChunk.substring(0, 100)}...`);
+              setFinalStreamedContent(prev => prev + chunk.contentChunk);
+            }
+          } catch (parseError) {
+            console.error(`[FRONTEND] Error parsing stream line ${receivedChunkCount} as JSON:`, lineToProcess.substring(0, 150), parseError);
+          }
+        }
+      } // End of while loop reading stream
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Translation request cancelled.');
+      } else {
+        console.error("[FRONTEND] Error during translation fetch/stream:", error);
+        setTranslationError(error.message || "An unknown error occurred during translation.");
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null; 
+      console.log("[FRONTEND] Translation process finished (finally block)."); 
+    }
+  };
+
+  // Function to cancel ongoing translation
+  const handleCancelTranslate = () => {
+    if (isStreaming && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      console.log("Attempting to cancel translation...");
+      // State updates (like isStreaming=false) happen in the finally block of handleRealTranslate
+    }
+  };
+
+  // Choose content to display
+  // --- UPDATED: Prioritize final streamed, then initial processed, then raw --- 
+  const contentToDisplay = finalStreamedContent
+    ? finalEnhancedContentMemo
+    : (initialProcessedContent ? initialEnhancedContentMemo : (article?.content || ''));
+  
+  const displayTitle = finalStreamedContent 
+    ? streamedTitle
+    : (isStreaming 
+        ? (streamedTitle || 'Translating title...')
+        : (article?.title || 'Loading title...')
+      );
+
   // Loading state
   if (isLoading) {
     return <ArticleSkeletonLoader />;
@@ -253,76 +591,90 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   }
 
   return (
-    <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200 ${showTTSPlayer ? 'pb-28' : ''}`}>
-      <ArticleToolbar 
-        isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
-        toggleFontSize={toggleFontSize}
-        tts={{
-          isPlaying: tts.isPlaying,
-          isLoading: tts.isLoading,
-          progress: tts.progress,
-          error: tts.error,
-          toggleTTS
-        }}
-        originalUrl={originalUrl}
-        translationInfo={translationInfo}
+    <>
+      <TranslationSettings 
+        onTranslate={handleRealTranslate}
+        isTranslating={isStreaming}
+        onCancel={handleCancelTranslate}
       />
-
-      {showTTSPlayer && (
-        <TTSPlayer
+    
+      <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200 ${showTTSPlayer ? 'pb-28' : ''}`}>
+        <ArticleToolbar 
+          isDarkMode={isDarkMode}
+          toggleDarkMode={toggleDarkMode}
+          toggleFontSize={toggleFontSize}
           tts={{
             isPlaying: tts.isPlaying,
             isLoading: tts.isLoading,
             progress: tts.progress,
-            currentTime: tts.currentTime,
-            duration: tts.duration,
-            seekTo: tts.seekTo,
-            seekBackward: tts.seekBackward,
-            seekForward: tts.seekForward,
-            play: tts.play,
-            pause: tts.pause
+            error: tts.error,
+            toggleTTS
           }}
-          onClose={closeMediaPlayer}
+          originalUrl={originalUrl}
+          translationInfo={{ language: streamedLang }}
         />
-      )}
 
-      <div className="p-6 md:p-8">
-        <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">{article.title}</h1>
-        
-        <ArticleMeta 
-          authorName={authorName}
-          authorImage={authorImage}
-          siteName={article.siteName}
-          publishDate={publishDate}
-        />
-        
-        <div className="relative" ref={articleContentRef}>
-          <div 
-            className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize === 'text-base' ? 'text-base' : fontSize === 'text-lg' ? 'text-lg' : fontSize === 'text-xl' ? 'text-xl' : 'text-2xl'} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
-            dangerouslySetInnerHTML={{ __html: enhancedContentMemo || processedContent || article.content }}
-            onClick={handleWordClick}
+        {showTTSPlayer && (
+          <TTSPlayer
+            tts={{
+              isPlaying: tts.isPlaying,
+              isLoading: tts.isLoading,
+              progress: tts.progress,
+              currentTime: tts.currentTime,
+              duration: tts.duration,
+              seekTo: tts.seekTo,
+              seekBackward: tts.seekBackward,
+              seekForward: tts.seekForward,
+              play: tts.play,
+              pause: tts.pause
+            }}
+            onClose={closeMediaPlayer}
           />
-          {/* WordPopup is now always rendered, controls its own visibility/animation via 'word' prop */}
-          <WordPopup 
-            word={selectedWord} // Pass null to hide/animate out
-            sentence={currentSentence}
-            onClose={closePopup} // Pass the close handler
-          />
-        </div>
-        
-        {isPaulGrahamArticle && !processedContent && (
-          <div className="mt-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Raw Article Content</h3>
-            <div className="whitespace-pre-wrap">
-              {article.textContent}
-            </div>
-          </div>
         )}
-        
-        <ArticleStyles isDarkMode={isDarkMode} fontSize={fontSize} />
+
+        <div className="p-6 md:p-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">{displayTitle}</h1>
+          
+          <ArticleMeta 
+            authorName={authorName}
+            authorImage={authorImage}
+            siteName={article.siteName}
+            publishDate={publishDate}
+          />
+
+          {translationError && (
+            <div className="my-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+              <p><strong>Translation Error:</strong> {translationError}</p>
+            </div>
+          )}
+          
+          <div className="relative" ref={articleContentRef}>
+            <div 
+              className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
+              dangerouslySetInnerHTML={{ __html: contentToDisplay }}
+              onClick={handleWordClick}
+            />
+            
+            <WordPopup 
+              word={selectedWord}
+              sentence={currentSentence}
+              onClose={closePopup}
+            />
+          </div>
+          
+          {isPaulGrahamArticle && !initialProcessedContent && (
+            <div className="mt-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">Raw Article Content (Fallback)</h3>
+              <div className="whitespace-pre-wrap">
+                {article.textContent}
+              </div>
+            </div>
+          )}
+          
+          <ArticleStyles isDarkMode={isDarkMode} fontSize={fontSize} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -477,7 +829,7 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       @keyframes fadeIn {
         from {
           opacity: 0;
-          transform: translateY(-5px);
+          transform: translateY(10px); /* Slight upward movement */
         }
         to {
           opacity: 1;
@@ -485,8 +837,10 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         }
       }
       
-      .animate-fadeIn {
-        animation: fadeIn 0.2s ease-out forwards;
+      .fade-in-chunk {
+        /* Apply animation with a slight delay between chunks if desired */
+        animation: fadeIn 0.5s ease-out forwards;
+        /* margin-bottom: 1rem; Add space between chunks if needed */
       }
       
       /* Custom range slider styling */

@@ -12,6 +12,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error - Import from external module
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.3";
 
+// Import the DOM parser
+// @ts-expect-error - Import from external module
+import { DOMParser, Element, Node } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
+
 // Define the expected request body structure
 interface TranslationRequest {
   articleContent: {
@@ -28,19 +32,6 @@ interface TranslationRequest {
   targetLanguage: string;
   readingAge: string;
   region?: string; // Added region parameter
-}
-
-// Define the response structure
-interface TranslationResponse {
-  title: string;
-  content: string;
-  textContent: string;
-  excerpt?: string;
-  byline?: string;
-  siteName?: string;
-  lang?: string;
-  publishedTime?: string | null;
-  [key: string]: unknown; // Allow for other properties
 }
 
 // Map reading age to a more descriptive format for the AI
@@ -95,440 +86,412 @@ const regionMap: Record<string, Record<string, string>> = {
   }
 };
 
-// HTML processing constants
-const MAX_CHUNK_SIZE = 4000; // Characters per chunk
-
-// Function to split HTML content into manageable chunks while preserving structure
-function chunkHtmlContent(html: string): string[] {
-  console.log("Starting HTML chunking...");
-  
-  // If the HTML is small enough, don't chunk it
-  if (html.length <= MAX_CHUNK_SIZE) {
-    console.log(`HTML content is small (${html.length} chars), no chunking needed`);
-    return [html];
-  }
-  
-  // Use a simpler, more reliable approach
-  // Instead of complex tag detection, we'll split by complete paragraphs/divs
-  const chunks: string[] = [];
-  
-  // Look for common block-level elements that make good break points
-  const breakPointPatterns = [
-    '</p>', '</div>', '</section>', '</article>', 
-    '</h1>', '</h2>', '</h3>', '</h4>', '</h5>', '</h6>',
-    '</li>', '</blockquote>', '</figure>'
-  ];
-  
-  let currentChunk = '';
-  let currentPos = 0;
-  
-  while (currentPos < html.length) {
-    // Find the next potential break point
-    let nearestBreakPoint = -1;
-    let breakPointTag = '';
-    
-    for (const pattern of breakPointPatterns) {
-      const position = html.indexOf(pattern, currentPos);
-      if (position !== -1 && (nearestBreakPoint === -1 || position < nearestBreakPoint)) {
-        nearestBreakPoint = position;
-        breakPointTag = pattern;
-      }
-    }
-    
-    // If no break point found, or it would make the chunk too large, 
-    // break at the current position + MAX_CHUNK_SIZE
-    if (nearestBreakPoint === -1 || 
-        (nearestBreakPoint - currentPos + breakPointTag.length) > MAX_CHUNK_SIZE) {
-      // Try to find a space to break at
-      const endPos = Math.min(currentPos + MAX_CHUNK_SIZE, html.length);
-      let breakPos = endPos;
-      
-      // Look for a space to break at within the last 20% of the chunk
-      const searchStart = Math.max(currentPos, endPos - Math.floor(MAX_CHUNK_SIZE * 0.2));
-      for (let i = endPos; i >= searchStart; i--) {
-        if (html[i] === ' ' || html[i] === '\n') {
-          breakPos = i;
-          break;
-        }
-      }
-      
-      // Add chunk and continue
-      chunks.push(html.substring(currentPos, breakPos));
-      console.log(`Created forced chunk of size ${breakPos - currentPos}`);
-      currentPos = breakPos;
-    } else {
-      // Add chunk up to and including the break point tag
-      const endPos = nearestBreakPoint + breakPointTag.length;
-      const newChunk = html.substring(currentPos, endPos);
-      
-      if (currentChunk.length + newChunk.length <= MAX_CHUNK_SIZE) {
-        currentChunk += newChunk;
-        currentPos = endPos;
-        
-        // If the chunk is getting close to the limit, add it and reset
-        if (currentChunk.length >= MAX_CHUNK_SIZE * 0.8) {
-          chunks.push(currentChunk);
-          console.log(`Created chunk of size ${currentChunk.length}`);
-          currentChunk = '';
-        }
-      } else {
-        // Add the current chunk if it has content and start a new one
-        if (currentChunk.length > 0) {
-          chunks.push(currentChunk);
-          console.log(`Created chunk of size ${currentChunk.length}`);
-        }
-        
-        // Start new chunk with the current segment
-        currentChunk = newChunk;
-        currentPos = endPos;
-      }
-    }
-  }
-  
-  // Add the final chunk if there's anything left
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-    console.log(`Added final chunk of size ${currentChunk.length}`);
-  }
-  
-  // Ensure each chunk has some wrapper for proper HTML structure
-  const processedChunks = chunks.map(chunk => {
-    if (!chunk.trim().startsWith('<')) {
-      return `<div>${chunk}</div>`;
-    }
-    return chunk;
-  });
-  
-  console.log(`Chunking complete. Created ${processedChunks.length} chunks.`);
-  
-  return processedChunks;
+// Interface for representing processed nodes
+interface ProcessedNode {
+  type: 'preserved' | 'translatable';
+  html: string;
 }
 
-// Function to translate HTML while preserving structure
-async function translateHtmlContent(
-  html: string, 
+// --- UPDATED Function to parse HTML and identify nodes (Mirroring Frontend) ---
+function parseHtmlAndIdentifyNodes(html: string): ProcessedNode[] {
+  console.log("[PARSE] Starting HTML parsing (body iteration strategy)...");
+  const nodes: ProcessedNode[] = [];
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const bodyElement = doc?.body;
+
+    if (!bodyElement) {
+      console.warn("[PARSE] Failed to parse or find document body. Treating entire content as one block.");
+      return [{ type: 'translatable', html }];
+    }
+
+    console.log(`[PARSE] Iterating through childNodes of <BODY>...`);
+
+    // Iterate through the BODY's direct children
+    bodyElement.childNodes.forEach((node: Node, index: number) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        const tagName = element.tagName.toLowerCase();
+
+        // --- ADDED CHECK: Handle the main readability div --- 
+        if (tagName === 'div' && element.id.startsWith('readability-page-')) {
+            console.log(`[PARSE] Found main container <div id='${element.id}'> at body level ${index + 1}. Processing its children...`);
+            // Iterate through the children of THIS div
+            element.childNodes.forEach((innerNode: Node, innerIndex: number) => {
+                if (innerNode.nodeType === Node.ELEMENT_NODE) {
+                    const innerElement = innerNode as Element;
+                    const innerTagName = innerElement.tagName.toLowerCase();
+                    const innerOuterHTML = innerElement.outerHTML;
+                    const innerShortHTML = innerOuterHTML?.substring(0, 100).replace(/\n/g, '') + (innerOuterHTML?.length > 100 ? '...' : '');
+
+                    if (!innerOuterHTML || !innerOuterHTML.trim()) { 
+                        console.log(`[PARSE] Skipping empty node inside container (index ${innerIndex + 1}).`);
+                        return; 
+                    }
+                    
+                    // Check if the INNER element is preservable
+                    if (innerTagName === 'figure' || innerTagName === 'img' || (innerTagName === 'div' && innerElement.classList.contains('video-placeholder'))) {
+                        console.log(`[PARSE] Identified PRESERVED node inside container (index ${innerIndex + 1}): ${innerShortHTML}`);
+                        nodes.push({ type: 'preserved', html: innerOuterHTML });
+                    } else {
+                        // If it's an <article> or <main> inside the div, process its children too
+                        if (['article', 'main'].includes(innerTagName)) {
+                            console.log(`[PARSE] Found <${innerTagName}> inside container. Processing its children...`);
+                            innerElement.childNodes.forEach((articleNode: Node, articleIndex: number) => {
+                                if (articleNode.nodeType === Node.ELEMENT_NODE) {
+                                    const articleElement = articleNode as Element;
+                                    const articleTagName = articleElement.tagName.toLowerCase();
+                                    const articleOuterHTML = articleElement.outerHTML;
+                                    const articleShortHTML = articleOuterHTML?.substring(0, 100).replace(/\n/g, '') + (articleOuterHTML?.length > 100 ? '...' : '');
+
+                                    if (!articleOuterHTML || !articleOuterHTML.trim()) {
+                                        console.log(`[PARSE] Skipping empty node inside <${innerTagName}> (index ${articleIndex + 1}).`);
+                                        return;
+                                    }
+                                    
+                                    if (articleTagName === 'figure' || articleTagName === 'img' || (articleTagName === 'div' && articleElement.classList.contains('video-placeholder'))) {
+                                        console.log(`[PARSE] Identified PRESERVED node inside <${innerTagName}> (index ${articleIndex + 1}): ${articleShortHTML}`);
+                                        nodes.push({ type: 'preserved', html: articleOuterHTML });
+                                    } else {
+                                        console.log(`[PARSE] Identified TRANSLATABLE node inside <${innerTagName}> (index ${articleIndex + 1}): ${articleShortHTML}`);
+                                        nodes.push({ type: 'translatable', html: articleOuterHTML });
+                                    }
+                                }
+                                 else if (articleNode.nodeType === Node.TEXT_NODE && articleNode.textContent?.trim()) {
+                                    const textContent = articleNode.textContent.trim();
+                                    const shortText = textContent.substring(0,50) + (textContent.length > 50 ? '...' : '');
+                                    console.log(`[PARSE] Identified stray text inside <${innerTagName}> (index ${articleIndex + 1}), wrapping in <p>. Text: "${shortText}"`);
+                                    nodes.push({ type: 'translatable', html: `<p>${textContent}</p>` });
+                                } else {
+                                    const skippedTagName = (articleNode as Element).tagName?.toLowerCase() || 'N/A';
+                                    console.log(`[PARSE] Skipping OTHER node inside <${innerTagName}> (index ${articleIndex + 1}, type: ${articleNode.nodeType}, tag: ${skippedTagName}).`);
+                                }
+                            });
+                        } else {
+                           console.log(`[PARSE] Identified TRANSLATABLE node inside container (index ${innerIndex + 1}): ${innerShortHTML}`);
+                           nodes.push({ type: 'translatable', html: innerOuterHTML });
+                        }
+                    }
+                }
+                 else if (innerNode.nodeType === Node.TEXT_NODE && innerNode.textContent?.trim()) {
+                    const textContent = innerNode.textContent.trim();
+                    const shortText = textContent.substring(0,50) + (textContent.length > 50 ? '...' : '');
+                    console.log(`[PARSE] Identified stray text inside container (index ${innerIndex + 1}), wrapping in <p>. Text: "${shortText}"`);
+                    nodes.push({ type: 'translatable', html: `<p>${textContent}</p>` });
+                } else {
+                    const skippedTagName = (innerNode as Element).tagName?.toLowerCase() || 'N/A';
+                    console.log(`[PARSE] Skipping OTHER node inside container (index ${innerIndex + 1}, type: ${innerNode.nodeType}, tag: ${skippedTagName}).`);
+                }
+            });
+            // Skip processing the div itself further down
+            return; 
+        }
+
+        // --- Original Check for top-level elements (like figures that are siblings to the main div) ---
+        const outerHTML = element.outerHTML;
+        const shortHTML = outerHTML?.substring(0, 100).replace(/\n/g, '') + (outerHTML?.length > 100 ? '...' : '');
+
+        if (!outerHTML || !outerHTML.trim()) {
+            console.log(`[PARSE] Skipping empty body-level node ${index+1} (tag: ${tagName}).`);
+            return;
+        }
+
+        // Identify preserved elements at the BODY level
+        if (tagName === 'figure' || tagName === 'img' || (tagName === 'div' && element.classList.contains('video-placeholder'))) {
+            console.log(`[PARSE] Identified PRESERVED body-level node ${index+1}: ${shortHTML}`);
+            nodes.push({ type: 'preserved', html: outerHTML });
+        } else {
+            console.log(`[PARSE] Identified TRANSLATABLE body-level node ${index+1}: ${shortHTML}`);
+            nodes.push({ type: 'translatable', html: outerHTML });
+        }
+      } else if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+          const textContent = node.textContent.trim();
+          const shortText = textContent.substring(0,50) + (textContent.length > 50 ? '...' : '');
+          console.log(`[PARSE] Identified stray text at body level ${index+1}, wrapping in <p>. Text: "${shortText}"`);
+          nodes.push({ type: 'translatable', html: `<p>${textContent}</p>` });
+      } else {
+          const skippedTagName = (node as Element).tagName?.toLowerCase() || 'N/A';
+          console.log(`[PARSE] Skipping OTHER body-level node ${index+1} (type: ${node.nodeType}, tag: ${skippedTagName}).`);
+      }
+    });
+
+  } catch (e) {
+    console.error("[PARSE] Error during HTML parsing:", e);
+    console.warn("[PARSE] Falling back to treating entire content as one translatable block.");
+    return [{ type: 'translatable', html }];
+  }
+  console.log(`[PARSE] Finished parsing. Identified ${nodes.length} nodes for processing.`);
+  return nodes;
+}
+
+// Function to stream translation for a single translatable node
+async function streamTranslateSingleNode(
+  nodeHtml: string,
   model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
   targetLanguage: string, 
   readingLevel: string,
-  dialectInfo: string = ""
-): Promise<string> {
-  // Log the input size
-  console.log(`Starting translation of HTML content. Length: ${html.length} characters`);
-  
-  // Split the HTML into manageable chunks
-  const chunks = chunkHtmlContent(html);
-  console.log(`Split HTML into ${chunks.length} chunks`);
-  
-  let translatedHtmlResponse = ''; // Renamed to avoid redeclaration later if issue is scoping
-  
-  // Process each chunk
-  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-    const currentChunk = chunks[chunkIndex]; // Renamed to avoid redeclaration later if issue is scoping
-    console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length}. Size: ${currentChunk.length} characters`);
-    
-    // Extract text content for translation while preserving tags
-    const tagMap: {[key: number]: string} = {};
-    let extractedText = '';
-    let inTag = false;
-    let tagIndex = 0;
-    const TAG_PREFIX = "!!!HTML_TAG_";
-    const TAG_SUFFIX = "!!!";
-    
-    // Replace tags with placeholders
-    for (let i = 0; i < currentChunk.length; i++) {
-      const char = currentChunk[i];
-      if (char === '<') {
-        inTag = true;
-        const tagStart = i;
-        while (i < currentChunk.length && currentChunk[i] !== '>') {
-          i++;
-        }
-        const tag = currentChunk.substring(tagStart, i + 1);
-        const placeholder = `${TAG_PREFIX}${tagIndex}${TAG_SUFFIX}`;
-        tagMap[tagIndex] = tag;
-        extractedText += placeholder;
-        tagIndex++;
-        inTag = false;
-      } else if (!inTag) {
-        extractedText += char;
-      } else if (char === '>') {
-        inTag = false;
-      }
-    }
-    console.log(`Chunk ${chunkIndex + 1}: Extracted text (first 100 chars): ${extractedText.substring(0, 100)}`);
-    
-    try {
-      // Define a more sophisticated prompt for better translation quality
-      const prompt = `
-      You are tasked with adapting an English text into ${targetLanguage} ${dialectInfo} suitable for readers at ${readingLevel} level. This adaptation is not a literal translation but a cultural and linguistic rewriting designed to preserve the original tone, style, and meaning.
+  dialectInfo: string = "",
+  controller: ReadableStreamController<Uint8Array>
+): Promise<void> {
+  const encoder = new TextEncoder();
+  console.log(`Translating node: ${nodeHtml.substring(0, 80)}...`);
 
-      Here is the text you will adapt:
+  // Simple prompt - no need to preserve elements as they are pre-filtered
+  const prompt = `
+    Translate the following HTML snippet to ${targetLanguage} ${dialectInfo} suitable for readers at ${readingLevel}.
+    Adapt the text culturally and linguistically, simplifying where necessary, but preserve the original tone, style, and meaning.
+    Preserve all HTML tags exactly as they appear in the snippet.
+    Return ONLY the translated HTML snippet.
 
-      <original_text>
-      ${extractedText.trim()}
-      </original_text>
+    Original HTML Snippet:
+    <snippet>
+    ${nodeHtml.trim()}
+    </snippet>
 
-      Follow these instructions carefully:
+    CRITICAL: Output ONLY the translated HTML snippet. Do not include the <snippet> tags or any other explanations.
+  `;
 
-      Cultural and Linguistic Adaptation:
-      - Rewrite the text as if originally composed by a Colombian native, maintaining the original tone and seriousness.
-      - Use vocabulary, idiomatic expressions, and sentence structures natural to everyday Colombian Spanish.
-      - Adapt cultural references and idioms to equivalents familiar to a Colombian audience while strictly preserving the intended meaning and tone of the original.
+  let isFirstChunk = true;
+  let firstChunkBuffer = '';
 
-      Accessibility for Language Learners:
-      - Simplify complex vocabulary and grammar without overly simplifying or altering the seriousness or maturity of the content.
-      - Break down lengthy or complex sentences into shorter, clearer ones where appropriate.
-      - Use common, everyday vocabulary; retain some moderately challenging words to support learning.
-      - Provide clear context or brief explanations for culturally-specific terms or phrases. You may use parentheses for explanations, e.g., "La Arenosa (como llaman a Barranquilla los locales)".
-
-      Reinforce important or difficult concepts by repeating key ideas using varied phrasing to enhance comprehension.
-
-      Important: Do NOT translate:
-      - Words or phrases specifically being discussed or defined in the text.
-      - Proper nouns unless they have established Spanish equivalents.
-      - Technical terms that are being explained.
-      - Quoted terms or expressions that are the subject of the sentence.
-
-      Your goal is a text that feels authentically ${dialectInfo}, is educationally appropriate for intermediate learners, and clearly conveys the original message, tone, and style. Avoid adding emotional commentary or phrases that could alter the tone of the original text.
-
-      Keep in mind that the target reader is actually an adult English native speaker who is learning ${targetLanguage}. The goal is to adapt the vocabulary, grammar, and sentence structure to make it more accessible, without making it childish.
-
-      CRITICAL: Do NOT modify any placeholders like "${TAG_PREFIX}0${TAG_SUFFIX}", "${TAG_PREFIX}1${TAG_SUFFIX}", etc. 
-      These are HTML tag placeholders and must remain exactly as they appear in the original text.
-
-      Return only the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.
-
-      **CRITICAL: Do not use any markdown formatting (like backticks \`\`\` or asterisks \* for bold/italics) in your response. If formatting is needed (like bold or italics), rely solely on the existing HTML tags provided as placeholders (\`\${TAG_PREFIX}...\${TAG_SUFFIX}\`). Output \*only\* the adapted text with the HTML tag placeholders preserved exactly as they appear in the original.**`;
-      
-      console.log(`Sending chunk to translation model...`);
-      const response = await model.generateContent(prompt);
-      let translatedText = response.response.text().trim();
-      console.log(`Received translation. Length: ${translatedText.length} characters`);
-      
-      if (translatedText === "") {
-        console.error(`Received empty translation for chunk ${chunkIndex + 1}, using original chunk as fallback.`);
-        translatedText = currentChunk; // Use renamed variable
-      }
-      // Check if all tags are present in the response
-      let missingTags = false;
-      for (let i = 0; i < tagIndex; i++) {
-        const placeholder = `${TAG_PREFIX}${i}${TAG_SUFFIX}`;
-        if (!translatedText.includes(placeholder)) {
-          console.error(`Missing placeholder ${placeholder} in translation response`);
-          missingTags = true;
+  try {
+    const streamResult = await model.generateContentStream(prompt);
+    for await (const streamChunk of streamResult.stream) {
+      if (streamChunk.candidates && streamChunk.candidates[0].content.parts.length > 0) {
+        const translatedTextPart = streamChunk.text();
+        
+        if (translatedTextPart) {
+          if (isFirstChunk) {
+            // --- Buffering Logic --- 
+            firstChunkBuffer = translatedTextPart;
+            isFirstChunk = false;
+            // Don't send yet, wait for the next chunk
+            console.log(`[STREAM_BUFFER] Buffered first part: "${firstChunkBuffer.substring(0,50)}..."`);
+          } else {
+            let chunkToSend = translatedTextPart;
+            // If there was something in the buffer, prepend it to this chunk
+            if (firstChunkBuffer) {
+              console.log(`[STREAM_BUFFER] Prepending buffer to second part and sending.`);
+              chunkToSend = firstChunkBuffer + translatedTextPart;
+              firstChunkBuffer = ''; // Clear the buffer
+            }
+            // Send the (potentially combined) chunk
+            const outputChunk = { contentChunk: chunkToSend };
+            controller.enqueue(encoder.encode(JSON.stringify(outputChunk) + '\n'));
+          }
         }
       }
-      if (missingTags) {
-        console.log("Some tags are missing - using original chunk as fallback"); // Updated log message
-        // If tags are missing, add the original chunk content directly
-        translatedHtmlResponse += currentChunk;
-        continue; // Skip rest of processing for this chunk
-      }
-      // Restore HTML tags
-      for (let i = 0; i < tagIndex; i++) {
-        const placeholder = `${TAG_PREFIX}${i}${TAG_SUFFIX}`;
-        translatedText = translatedText.replace(placeholder, tagMap[i]);
-      }
-      translatedHtmlResponse += translatedText; // Use renamed variable
-      console.log(`Added translated chunk. Total translated HTML length so far: ${translatedHtmlResponse.length}`);
-    } catch (error) {
-      console.error(`Error translating chunk ${chunkIndex + 1}:`, error);
-      console.log(`Using original content for chunk ${chunkIndex + 1} due to error`);
-      translatedHtmlResponse += currentChunk; // Use renamed variable in case of error
     }
+    // --- Handle leftover buffer --- 
+    // If the stream ended after only one chunk was received, send the buffered content.
+    if (firstChunkBuffer) {
+        console.log(`[STREAM_BUFFER] Stream ended with only one part, sending buffered content.`);
+        const outputChunk = { contentChunk: firstChunkBuffer };
+        controller.enqueue(encoder.encode(JSON.stringify(outputChunk) + '\n'));
+    }
+
+    console.log(`Finished translating node: ${nodeHtml.substring(0, 80)}...`);
+  } catch (error) {
+    console.error(`Error streaming translation for node: ${nodeHtml.substring(0, 80)}...`, error);
+    // Send back the original node HTML as fallback?
+    // Or send specific error chunk?
+    const fallbackChunk = { contentChunk: nodeHtml }; // Send original back
+    controller.enqueue(encoder.encode(JSON.stringify(fallbackChunk) + '\n'));
+    console.warn("Sent original node HTML as fallback due to translation error.");
+    // Optionally send an error signal chunk too
+    // const errorChunk = { error: `Failed to translate node`, details: error instanceof Error ? error.message : 'Unknown streaming error' };
+    // controller.enqueue(encoder.encode(JSON.stringify(errorChunk) + '\n'));
   }
-  
-  console.log(`Translation complete. Final HTML length: ${translatedHtmlResponse.length}`);
-  return translatedHtmlResponse; // Return renamed variable
 }
 
-// Function to handle image tags in HTML
-function preserveMediaElements(html: string): string {
-  // Log the input
-  console.log(`Processing media elements in HTML. Length: ${html.length} characters`);
-  
-  // In a full implementation, this would identify and properly handle
-  // image tags, videos, and other media elements
-  
-  // For this implementation, we'll ensure img tags are preserved
-  // This is simplified - a real implementation would use a proper HTML parser
-  const processed = html.replace(/<img[^>]*>/g, (match) => {
-    // Return the image tag unchanged
-    return match;
-  });
-  
-  console.log(`Media elements processed. Output length: ${processed.length}`);
-  return processed;
+// --- UPDATED CORE PROCESSING FUNCTION ---
+async function processAndStreamArticle(
+  articleHtml: string,
+  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
+  languageName: string, // Using full name for prompt
+  readingLevel: string, // Using mapped level for prompt
+  dialectInfo: string,
+  controller: ReadableStreamController<Uint8Array>
+) {
+  // Parse nodes first - This will now parse deeper
+  const nodes = parseHtmlAndIdentifyNodes(articleHtml);
+  const encoder = new TextEncoder();
+  let preservedNodeCounter = 0; // Counter for generating preserved node keys
+
+  console.log(`[PROCESS_STREAM] Starting to process ${nodes.length} identified nodes using reference method.`);
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    console.log(`[PROCESS_STREAM] Processing node ${i + 1}/${nodes.length}, type: ${node.type}`);
+
+    if (node.type === 'preserved') {
+      // Generate the reference key matching the frontend logic
+      const refKey = `preserved-${preservedNodeCounter}`;
+      preservedNodeCounter++; // Increment for the next preserved node
+
+      // Construct the reference object
+      const refChunk = { preservedRef: refKey };
+      
+      console.log(`[PROCESS_STREAM] Enqueueing PRESERVED node ${i + 1} reference: ${JSON.stringify(refChunk)}`);
+      // Send the reference object as JSON, followed by a newline
+      controller.enqueue(encoder.encode(JSON.stringify(refChunk) + '\n'));
+
+    } else if (node.type === 'translatable') {
+      // Handle translatable nodes by streaming their translation
+      console.log(`[PROCESS_STREAM] Starting translation for TRANSLATABLE node ${i + 1}: ${node.html.substring(0, 80)}...`);
+      await streamTranslateSingleNode(
+        node.html,
+        model,
+        languageName,
+        readingLevel,
+        dialectInfo,
+        controller
+      );
+      console.log(`[PROCESS_STREAM] Finished translation for TRANSLATABLE node ${i + 1}`);
+    }
+    // Note: No 'else' needed as parseHtmlAndIdentifyNodes should only return these two types
+    // or an error would have occurred earlier.
+  }
+  console.log("[PROCESS_STREAM] Finished processing and streaming all nodes.");
 }
 
+// Serve Function (largely the same, calls the updated processAndStreamArticle)
 serve(async (req: Request) => {
-  // CORS headers
+  // Handle preflight requests (remains the same)
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+      },
+      status: 204
+    });
+  }
+
+  // Only allow POST requests (remains the same)
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      status: 405
+    });
+  }
+
+  // --- Stream Setup (remains the same) ---
+  let streamController: ReadableStreamController<Uint8Array> | null = null;
+  const stream = new ReadableStream({
+    start(controller) {
+      streamController = controller;
+      console.log("Stream controller assigned.");
+    },
+    cancel() {
+      console.log("Stream cancelled by client.");
+    }
+  });
+
+  // --- Headers (remains the same) ---
   const headers = new Headers({
-    "Content-Type": "application/json",
+    "Content-Type": "application/x-ndjson",
+    "Transfer-Encoding": "chunked",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization"
   });
 
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers, status: 204 });
-  }
-
-  // Only allow POST requests
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { headers, status: 405 }
-    );
-  }
-
-  try {
-    // Authentication is now optional
+  // --- Start Processing Asynchronously (IIAFE) ---
+  (async () => {
+    const encoder = new TextEncoder();
+    try {
+      if (!streamController) {
+        console.error("Stream controller was not assigned after ReadableStream was created.");
+        return;
+      }
+      
+      // Authentication check (remains the same)
     const authHeader = req.headers.get('Authorization');
-    // We track authentication status but don't require it
-    // This could be used for rate limiting or analytics in the future
     const isAuthenticated = !!(authHeader && authHeader.startsWith('Bearer '));
+      console.log(isAuthenticated ? "Received authentication token" : "No authentication token provided");
 
-    if (isAuthenticated) {
-      console.log("Received authentication token");
-    } else {
-      console.log("No authentication token provided - proceeding as unauthenticated user");
-    }
-
-    // Get the API key from environment variables
-    // @ts-expect-error - Deno is available in the Supabase Edge Function environment
+      // Get API Key (remains the same)
+      // @ts-expect-error - Deno namespace is available in Supabase Edge Functions
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY environment variable not set");
     }
 
-    // Parse the request body
+      // Parse request body (remains the same)
     const requestData: TranslationRequest = await req.json();
     const { articleContent, targetLanguage, readingAge, region } = requestData;
+      console.log(`Received translation request for lang: ${targetLanguage}, age: ${readingAge}, region: ${region || 'default'}`);
+      console.log(`Article title: "${articleContent.title}", Content length: ${articleContent.content.length}`);
 
-    console.log(`Received translation request for language: ${targetLanguage}, reading age: ${readingAge}, region: ${region || 'default'}`);
-    console.log(`Article title: "${articleContent.title}"`);
-    console.log(`Article content length: ${articleContent.content.length} characters`);
-
-    // Validate required fields
+      // Validate required fields (remains the same)
     if (!articleContent || !targetLanguage || !readingAge) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: articleContent, targetLanguage, or readingAge" }),
-        { headers, status: 400 }
-      );
+        throw new Error("Missing required fields: articleContent, targetLanguage, or readingAge");
     }
 
-    // Get the full language name and reading level description
+      // Get language/level/dialect info (remains the same)
     const languageName = languageMap[targetLanguage] || targetLanguage;
     const readingLevel = readingAgeMap[readingAge] || readingAge;
-    
-    // Get region-specific dialect if provided
     let dialectInfo = "";
     if (region && regionMap[targetLanguage] && regionMap[targetLanguage][region]) {
       dialectInfo = regionMap[targetLanguage][region];
       console.log(`Using dialect: ${dialectInfo}`);
     }
 
-    // Initialize the Gemini API client
+      // Initialize Gemini client (remains the same)
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using 1.5 Flash as it supports streaming well
 
-    // Process the title
-    console.log(`Translating title...`);
-    const titlePrompt = `
-    You are tasked with adapting the following title from English to ${languageName} ${dialectInfo} for readers at ${readingLevel}.
-
-    Create a title that:
-    1. Captures the essence and meaning of the original
-    2. Sounds natural to native ${languageName} speakers
-    3. Uses appropriate vocabulary for ${readingLevel}
-    4. Preserves the style and tone of the original (formal, casual, academic, etc.)
-
-    Original title: "${articleContent.title}"
-
-    Return only the translated title without any additional text, explanations, or quotation marks.
-
-    **CRITICAL: Do not use any markdown formatting (like backticks \`\`\` or asterisks \* for bold/italics) in your response. Output \*only\* the translated text.**`;
-
+      // --- Step 1: Translate Title (Non-streaming) ---
+      console.log(`Translating title: "${articleContent.title}"`);
+      const titlePrompt = `Translate this title to ${languageName} ${dialectInfo} for a ${readingLevel} reader: "${articleContent.title}". Return ONLY the translated title.`;
     const titleResponse = await model.generateContent(titlePrompt);
     const translatedTitle = titleResponse.response.text().trim();
     console.log(`Title translated: "${translatedTitle}"`);
 
-    // Make sure media elements are preserved
-    console.log(`Preserving media elements...`);
-    const contentWithPreservedMedia = preserveMediaElements(articleContent.content);
-    
-    // Translate the content while preserving HTML structure
-    console.log(`Starting content translation...`);
-    // Get the translated HTML content
-    const translatedHtmlResult = await translateHtmlContent(
-      contentWithPreservedMedia,
+      // --- Step 2: Send Metadata Chunk --- 
+      const metadataChunk = { metadata: { title: translatedTitle, lang: targetLanguage } };
+      (streamController as ReadableStreamController<Uint8Array>).enqueue(encoder.encode(JSON.stringify(metadataChunk) + '\n')); 
+      console.log("Sent metadata chunk.");
+
+      // --- Step 3: Process and Stream Content (NEW CORE LOGIC) ---
+      console.log(`Starting article processing and streaming...`);
+      await processAndStreamArticle(
+        articleContent.content, // Pass the original HTML
       model,
       languageName,
       readingLevel,
-      dialectInfo
-    );
+        dialectInfo,
+        streamController as ReadableStreamController<Uint8Array>
+      );
 
-    // Declare a variable to hold the final content to be used
-    let finalContent: string;
+      console.log("Article processing and streaming finished successfully.");
+      (streamController as ReadableStreamController<Uint8Array>).close(); 
 
-    // Check if we got any content back
-    if (!translatedHtmlResult || translatedHtmlResult.trim() === '') {
-      console.error(`Translation returned empty content! Using original content as fallback.`);
-      // Assign original content if translation failed
-      finalContent = contentWithPreservedMedia; 
-    } else {
-      // Assign successful translation
-      finalContent = translatedHtmlResult;
+    } catch (error) {
+      console.error("Error during streaming request processing:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error during streaming";
+      const errorChunk = { error: "Failed to process translation stream", details: errorMessage };
+      if (streamController) { 
+        try {
+            (streamController as ReadableStreamController<Uint8Array>).enqueue(encoder.encode(JSON.stringify(errorChunk) + '\n'));
+        } catch (writeError) {
+            console.error("Failed to write error chunk to stream:", writeError);
+        }
+        try {
+            (streamController as ReadableStreamController<Uint8Array>).close();
+        } catch (closeError) {
+            console.error("Failed to close stream after error:", closeError);
+        }
+      }
     }
-    
-    console.log(`Content translation complete. Length: ${finalContent.length} characters`);
+  })(); // End of IIAFE
 
-    // Extract plain text for the textContent field
-    console.log(`Extracting plain text from translated HTML...`);
-    // Simple regex approach to remove HTML tags for the plain text version
-    const translatedTextContent = finalContent // Use the final content
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    
-    console.log(`Plain text extraction complete. Length: ${translatedTextContent.length} characters`);
-
-    // Prepare the response
-    const translatedArticle: TranslationResponse = {
-      ...articleContent,
-      title: translatedTitle,
-      content: finalContent, // Use the final content
-      textContent: translatedTextContent,
-      lang: targetLanguage,
-    };
-    console.log(`Returning translated article - Title: "${translatedArticle.title}", Content length: ${translatedArticle.content.length}, TextContent length: ${translatedArticle.textContent.length}`);
-
-    return new Response(JSON.stringify(translatedArticle), { headers, status: 200 });
-  } catch (error: unknown) {
-    console.error("Error processing translation:", error);
-    
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    
-    return new Response(
-      JSON.stringify({ 
-        error: "Failed to process translation request", 
-        details: errorMessage 
-      }),
-      { headers, status: 500 }
-    );
-  }
+  // Return the stream response immediately
+  return new Response(stream, { headers, status: 200 });
 });
 
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/translate-article' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
+/* Old invocation instructions are still valid for testing non-streaming parts if needed,
+   but testing streaming requires a client that can handle chunked responses.
 */
