@@ -71,32 +71,32 @@ serve(async (req: Request) => {
     let prompt;
     
     if (targetWord) {
-      prompt = `Translate the following sentence from English to Spanish (Colombian dialect). Provide a word-for-word translation that preserves the structure of the original as much as possible while still being grammatically correct Spanish:
+      prompt = `Translate the following sentence into English. Detect the source language automatically:
 
 Original: "${text}"
 
 The word "${targetWord}" appears in the original text. In your response, I need:
-1. A direct, word-for-word translation that maintains the original sentence structure
-2. The exact Spanish word(s) that translate "${targetWord}"
+1. An accurate English translation of the entire sentence.
+2. The exact English word(s) that translate "${targetWord}" within the context of the sentence.
 
 Format your response as JSON with these fields:
 {
-  "translation": "your Spanish translation here",
-  "targetWordTranslation": "the Spanish translation of the target word"
+  "translation": "your English translation here",
+  "targetWordTranslation": "the English translation of the target word"
 }
 
-Important: Make sure the target word's translation appears in your full translation. Do not add any explanation or comments.`;
+Important: Ensure the target word's English translation corresponds to its meaning in the original sentence. Make sure the target word's translation appears within your full translation where appropriate. Do not add any explanation or comments outside the JSON structure.`;
     } else {
-      prompt = `Translate the following sentence from English to Spanish (Colombian dialect). Provide a word-for-word translation that preserves the structure of the original as much as possible while still being grammatically correct Spanish:
+      prompt = `Translate the following sentence into English. Detect the source language automatically:
 
 Original: "${text}"
 
 Format your response as JSON with this field:
 {
-  "translation": "your Spanish translation here"
+  "translation": "your English translation here"
 }
 
-Important: Provide a direct, literal translation that maintains the original sentence structure as much as possible. Do not add any explanation or comments.`;
+Important: Provide an accurate English translation. Do not add any explanation or comments outside the JSON structure.`;
     }
 
     // Call the Gemini API

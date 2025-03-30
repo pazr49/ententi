@@ -66,25 +66,27 @@ serve(async (req: Request) => {
     });
 
     // Prepare prompt for the Gemini API
-    let prompt = `You are a language learning assistant. Rephrase the following English sentence to make it simpler and more accessible for language learners while preserving the exact same meaning:
+    let prompt = `You are a language learning assistant. Your task is to rephrase the following sentence to make it simpler and more accessible for language learners, while preserving the exact same meaning AND staying in the original language.
+
+First, detect the language of the original sentence.
 
 Original: "${text}"
 
-Your task:
-1. Simplify vocabulary by using more common, everyday words
-2. Break down complex grammar into simpler structures
-3. Make the logic and flow of the sentence clearer
-4. Feel free to rearrange or expand the sentence if it helps clarity
-5. Ensure ALL important information from the original is preserved - the meaning MUST stay the same
+Then, rephrase it in the DETECTED language according to these rules:
+1. Simplify vocabulary by using more common, everyday words within that language.
+2. Break down complex grammar into simpler structures common in that language.
+3. Make the logic and flow of the sentence clearer.
+4. Feel free to rearrange or expand the sentence if it helps clarity, but stay in the original language.
+5. Ensure ALL important information from the original is preserved - the meaning MUST stay the same.
 
-If the sentence contains idioms or figurative language, explain these in simpler terms. 
+If the sentence contains idioms or figurative language, explain these in simpler terms *in the original language*.
 
 Format your response as JSON with this field:
 {
-  "rephrasedText": "Your simplified version here"
+  "rephrasedText": "Your simplified version in the original language here"
 }
 
-Important: Don't oversimplify to the point of being childish. The goal is to make the text accessible to intermediate English learners.`;
+Important: Do not translate. The output MUST be in the same language as the input. Don't oversimplify to the point of being childish. The goal is to make the text accessible to intermediate learners of that language.`;
 
     // If there's a targetWord, ask the model to ensure it's retained if possible
     if (targetWord) {
