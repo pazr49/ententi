@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useRef } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -9,7 +9,6 @@ import {
   ArticleReader,
   ArticleStatusMessage 
 } from '@/components/articles';
-import { TranslationSettings } from '@/components/ui';
 
 // Import our custom hooks
 import { useArticleFetching } from '@/hooks/useArticleFetching';
@@ -23,15 +22,10 @@ function ArticleContent() {
   
   // Use our custom hooks
   const { article, isLoading, error, fetchArticle } = useArticleFetching();
-  const { translatedArticle, isTranslating, translationError, translate, cancelTranslation } = useArticleTranslation();
+  const { translatedArticle, isTranslating, translationError } = useArticleTranslation();
   const { isSaved } = useArticleSaving(url);
   
   const [isClient, setIsClient] = useState(false);
-  const [translationRegion, setTranslationRegion] = useState<string | undefined>();
-  const [translationLanguage, setTranslationLanguage] = useState<string | undefined>();
-  
-  // Store pending translation info to apply when translation completes
-  const pendingTranslationRef = useRef<{language?: string, region?: string}>({});
 
   // Set isClient once component mounts
   useEffect(() => {
@@ -61,31 +55,13 @@ function ArticleContent() {
   useEffect(() => {
     if (translatedArticle && !isTranslating) {
       // Apply the pending translation info when translation finishes successfully
-      setTranslationLanguage(pendingTranslationRef.current.language);
-      setTranslationRegion(pendingTranslationRef.current.region);
     } else if (!translatedArticle) {
       // Clear translation info when there's no translated article
-      setTranslationLanguage(undefined);
-      setTranslationRegion(undefined);
     }
   }, [translatedArticle, isTranslating]);
 
-  // Handle translation
-  const handleTranslate = async (language: string, readingAge: string, region?: string) => {
-    if (!article) return;
-    
-    // Store info for when translation completes, but don't set state yet
-    pendingTranslationRef.current = { language, region };
-    
-    // Clear current translation info at the start of a new translation
-    setTranslationLanguage(undefined);
-    setTranslationRegion(undefined);
-    
-    await translate(article, language, readingAge, region);
-  };
-
-  // Determine which article content to show
-  const displayArticle = translatedArticle || article;
+  // Determine which article content to show - Use original article directly
+  // const displayArticle = translatedArticle || article;
 
   return (
     <div className="article-page-container px-4 py-8">
@@ -96,24 +72,12 @@ function ArticleContent() {
         translationError={translationError}
       />
       
-      {/* Translation settings */}
-      {displayArticle && (
-        <TranslationSettings 
-          onTranslate={handleTranslate}
-          isTranslating={isTranslating}
-          onCancel={cancelTranslation}
-        />
-      )}
-      
-      {/* Main article content */}
-      {displayArticle && (
+      {/* Main article content - Pass the original article */}
+      {article && (
         <ArticleReader 
-          article={displayArticle} 
+          article={article}
+          isLoading={isLoading}
           originalUrl={url || undefined}
-          translationInfo={translatedArticle ? {
-            region: translationRegion,
-            language: translationLanguage
-          } : undefined}
         />
       )}
     </div>
@@ -123,7 +87,7 @@ function ArticleContent() {
 // Wrap with suspense boundary
 export default function ArticlePage() {
   return (
-    <Suspense fallback={<div></div>}>
+    <Suspense fallback={<div>Loading article...</div>}>
       <ArticleContent />
     </Suspense>
   );

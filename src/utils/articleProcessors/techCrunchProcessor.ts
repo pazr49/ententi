@@ -12,95 +12,87 @@ export const techCrunchProcessor: ArticleProcessor = {
       processedContent: article.content
     };
     
-    console.log("Processing TechCrunch article");
+    console.log("Processing TechCrunch article:", url); // Added URL for context
     
-    // Create a temporary DOM element to manipulate the HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = article.content;
-    
-    // Extract author image from TechCrunch specific selectors
+    // Create a temporary DOM element to hold the entire initial content
+    const tempHolder = document.createElement('div');
+    tempHolder.innerHTML = article.content;
+
+    // Find the main Readability container
+    const mainContainer = tempHolder.querySelector('#readability-page-1');
+
+    // Extract author image (can be done on tempHolder)
     let authorImage: string | null = null;
-    const profileImgs = tempDiv.querySelectorAll('.article-byline img[src*="profile"], img[class*="avatar"], img[class*="profile"]');
-    
+    const profileImgs = tempHolder.querySelectorAll('.article-byline img[src*="profile"], img[class*="avatar"], img[class*="profile"]');
     if (profileImgs.length > 0) {
       authorImage = profileImgs[0].getAttribute('src');
       console.log("Found author image:", authorImage);
     }
-    
-    // Remove all instances of the author image from the content
-    if (authorImage) {
-      const allImages = tempDiv.querySelectorAll('img');
-      allImages.forEach(img => {
-        if (img.getAttribute('src') === authorImage) {
-          const parent = img.parentElement;
-          if (parent) {
-            // Check if parent is an author container
-            if (parent.classList.contains('article-byline') || 
-                parent.classList.toString().includes('author') || 
-                parent.classList.toString().includes('profile')) {
-              parent.remove();
-            } else {
-              img.remove();
+    result.authorImage = authorImage;
+
+    if (!mainContainer) {
+        console.warn('[TechCrunch Processor] Could not find #readability-page-1 container. Processing may be unreliable.');
+        // Fallback to processing the entire tempHolder
+        removeCommonUnwantedElements(tempHolder);
+        // TechCrunch-specific removals
+        tempHolder.querySelectorAll('[class*="related-articles"], [class*="social"], [id*="social"]').forEach(el => el.remove());
+        // Hero image fallback
+        let fallbackHasHero = false;
+        if(thumbnailUrl) {
+            tempHolder.querySelectorAll('img').forEach(img => { if(img.src === thumbnailUrl) fallbackHasHero = true; });
+            if (!fallbackHasHero) {
+                 console.log("Adding hero image from thumbnail to fallback tempHolder:", thumbnailUrl);
+                 const figure = document.createElement('figure'); figure.className = 'hero-image';
+                 const img = document.createElement('img'); img.src = thumbnailUrl; img.alt = article.title; img.className = 'hero-image-img';
+                 figure.appendChild(img);
+                 if (tempHolder.firstChild) tempHolder.insertBefore(figure, tempHolder.firstChild);
+                 else tempHolder.appendChild(figure);
             }
-          } else {
-            img.remove();
+        }
+        applyCommonStyling(tempHolder);
+        result.processedContent = tempHolder.innerHTML;
+    } else {
+        // --- Process within the main container --- 
+        console.log('[TechCrunch Processor] Found #readability-page-1 container. Processing inside it.');
+
+        // First remove common unwanted elements *within* the main container
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
+        
+        // Remove author images from content *within* the main container
+        // We already extracted the src, now remove the elements
+        mainContainer.querySelectorAll('.article-byline img[src*="profile"], img[class*="avatar"], img[class*="profile"]').forEach(img => {
+            const parent = img.closest('.article-byline, [class*="author"], [class*="profile"]');
+            if (parent) parent.remove(); else img.remove(); 
+        });
+
+        // TechCrunch-specific cleanups *within* the main container
+        mainContainer.querySelectorAll('[class*="related-articles"], [class*="social"], [id*="social"]').forEach(el => el.remove());
+        
+        // --- Hero Image Logic within main container --- 
+        let hasHeroImage = false;
+        if (thumbnailUrl) {
+          const existingImages = mainContainer.querySelectorAll('img');
+          existingImages.forEach(img => { if (img.src === thumbnailUrl) hasHeroImage = true; });
+
+          if (!hasHeroImage) {
+            console.log("Adding hero image from thumbnail inside main container:", thumbnailUrl);
+            const figure = document.createElement('figure'); figure.className = 'hero-image';
+            const img = document.createElement('img'); img.src = thumbnailUrl; img.alt = article.title; img.className = 'hero-image-img';
+            figure.appendChild(img);
+            const insertTarget = mainContainer.firstElementChild || mainContainer;
+            insertTarget.insertBefore(figure, insertTarget.firstChild);
           }
         }
-      });
+
+        // Apply common styling *to the main container*
+        applyCommonStyling(mainContainer as HTMLDivElement);
+
+        // --- Return innerHTML of the main container --- 
+        result.processedContent = mainContainer.innerHTML;
+        console.log("[TechCrunch Processor] Successfully processed within #readability-page-1.");
     }
     
-    // TechCrunch specific cleanup
-    // Remove "Related Articles" section
-    const relatedArticles = tempDiv.querySelectorAll('[class*="related-articles"]');
-    relatedArticles.forEach(el => el.remove());
-    
-    // Remove social media sharing elements
-    const socialElements = tempDiv.querySelectorAll('[class*="social"], [id*="social"]');
-    socialElements.forEach(el => el.remove());
-    
-    // Add hero image if needed
-    let hasHeroImage = false;
-    if (thumbnailUrl) {
-      const existingImages = tempDiv.querySelectorAll('img');
-      
-      // Check if we already have a matching image in the content
-      existingImages.forEach(img => {
-        if (img.src === thumbnailUrl) {
-          hasHeroImage = true;
-        }
-      });
-      
-      // If no hero image found and we have a thumbnail URL, add it
-      if (!hasHeroImage) {
-        console.log("Adding hero image from thumbnail:", thumbnailUrl);
-        
-        // Create figure and image elements
-        const figure = document.createElement('figure');
-        figure.className = 'hero-image';
-        
-        const img = document.createElement('img');
-        img.src = thumbnailUrl;
-        img.alt = article.title;
-        img.className = 'hero-image-img';
-        
-        figure.appendChild(img);
-        
-        // Add the hero image to the beginning of the content
-        if (tempDiv.firstChild) {
-          tempDiv.insertBefore(figure, tempDiv.firstChild);
-        } else {
-          tempDiv.appendChild(figure);
-        }
-      }
-    }
-    
-    // Remove common unwanted elements
-    removeCommonUnwantedElements(tempDiv);
-    
-    // Apply common styling
-    applyCommonStyling(tempDiv);
-    
-    // Extract and format publication date if available
+    // Extract and format publication date if available (from original article data)
     if (article.publishedTime) {
       try {
         const date = new Date(article.publishedTime);
@@ -117,9 +109,6 @@ export const techCrunchProcessor: ArticleProcessor = {
         result.publishDate = article.publishedTime;
       }
     }
-    
-    result.processedContent = tempDiv.innerHTML;
-    result.authorImage = authorImage;
     
     return result;
   }

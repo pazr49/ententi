@@ -13,86 +13,90 @@ export const defaultProcessor: ArticleProcessor = {
       processedContent: article.content
     };
     
-    console.log("Processing article with default processor");
+    console.log("Processing article with default processor:", url);
     
-    // Create a temporary DOM element to manipulate the HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = article.content;
-    
-    // Look for author images using generic patterns
+    // Create a temporary DOM element to hold the entire initial content
+    const tempHolder = document.createElement('div');
+    tempHolder.innerHTML = article.content;
+
+    // Find the main Readability container
+    const mainContainer = tempHolder.querySelector('#readability-page-1');
+
+    // Look for author images using generic patterns (can be done on tempHolder)
     let authorImage: string | null = null;
-    
-    // Look for images near author names or in byline sections
-    const bylineElements = tempDiv.querySelectorAll('[class*="byline"], [class*="author"], [id*="author"]');
+    const bylineElements = tempHolder.querySelectorAll('[class*="byline"], [class*="author"], [id*="author"]');
     bylineElements.forEach(element => {
       const img = element.querySelector('img');
       if (img && img.src && !authorImage) {
         authorImage = img.src;
         console.log("Found author image in byline:", authorImage);
-        img.remove();
+        // Don't remove here, removal should happen within mainContainer if needed, 
+        // but often author images aren't in the main content anyway.
       }
     });
-    
-    // Try looking for images that contain "author" or "profile" in src
     if (!authorImage) {
-      const allImages = tempDiv.querySelectorAll('img');
+      const allImages = tempHolder.querySelectorAll('img');
       allImages.forEach(img => {
         const src = img.getAttribute('src') || '';
-        if ((src.includes('author') || 
-             src.includes('profile') || 
-             src.includes('avatar') || 
-             src.includes('headshot')) && 
-            !authorImage) {
+        if ((src.includes('author') || src.includes('profile') || src.includes('avatar') || src.includes('headshot')) && !authorImage) {
           authorImage = src;
           console.log("Found author image by src pattern:", authorImage);
-          img.remove();
         }
       });
     }
-    
-    // Add hero image if needed
-    let hasHeroImage = false;
-    if (thumbnailUrl) {
-      const existingImages = tempDiv.querySelectorAll('img');
-      
-      // Check if we already have a matching image in the content
-      existingImages.forEach(img => {
-        if (img.src === thumbnailUrl) {
-          hasHeroImage = true;
+    result.authorImage = authorImage; // Set author image regardless of container processing
+
+    if (!mainContainer) {
+        console.warn('[Default Processor] Could not find #readability-page-1 container. Processing may be unreliable.');
+        // Fallback to processing the entire tempHolder
+        removeCommonUnwantedElements(tempHolder);
+        // Add hero image logic for fallback (less reliable positioning)
+        let fallbackHasHero = false;
+        if(thumbnailUrl) {
+            tempHolder.querySelectorAll('img').forEach(img => { if(img.src === thumbnailUrl) fallbackHasHero = true; });
+            if (!fallbackHasHero) {
+                 console.log("Adding hero image from thumbnail to fallback tempHolder:", thumbnailUrl);
+                 const figure = document.createElement('figure'); figure.className = 'hero-image';
+                 const img = document.createElement('img'); img.src = thumbnailUrl; img.alt = article.title; img.className = 'hero-image-img';
+                 figure.appendChild(img);
+                 if (tempHolder.firstChild) tempHolder.insertBefore(figure, tempHolder.firstChild);
+                 else tempHolder.appendChild(figure);
+            }
         }
-      });
-      
-      // If no hero image found and we have a thumbnail URL, add it
-      if (!hasHeroImage) {
-        console.log("Adding hero image from thumbnail:", thumbnailUrl);
-        
-        // Create figure and image elements
-        const figure = document.createElement('figure');
-        figure.className = 'hero-image';
-        
-        const img = document.createElement('img');
-        img.src = thumbnailUrl;
-        img.alt = article.title;
-        img.className = 'hero-image-img';
-        
-        figure.appendChild(img);
-        
-        // Add the hero image to the beginning of the content
-        if (tempDiv.firstChild) {
-          tempDiv.insertBefore(figure, tempDiv.firstChild);
-        } else {
-          tempDiv.appendChild(figure);
+        applyCommonStyling(tempHolder);
+        result.processedContent = tempHolder.innerHTML;
+    } else {
+        // --- Process within the main container --- 
+        console.log('[Default Processor] Found #readability-page-1 container. Processing inside it.');
+
+        // First remove common unwanted elements *within* the main container
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
+
+        // --- Hero Image Logic within main container --- 
+        let hasHeroImage = false;
+        if (thumbnailUrl) {
+          const existingImages = mainContainer.querySelectorAll('img');
+          existingImages.forEach(img => { if (img.src === thumbnailUrl) hasHeroImage = true; });
+
+          if (!hasHeroImage) {
+            console.log("Adding hero image from thumbnail inside main container:", thumbnailUrl);
+            const figure = document.createElement('figure'); figure.className = 'hero-image';
+            const img = document.createElement('img'); img.src = thumbnailUrl; img.alt = article.title; img.className = 'hero-image-img';
+            figure.appendChild(img);
+            const insertTarget = mainContainer.firstElementChild || mainContainer;
+            insertTarget.insertBefore(figure, insertTarget.firstChild);
+          }
         }
-      }
+
+        // Apply common styling *to the main container*
+        applyCommonStyling(mainContainer as HTMLDivElement);
+
+        // --- Return innerHTML of the main container --- 
+        result.processedContent = mainContainer.innerHTML;
+        console.log("[Default Processor] Successfully processed within #readability-page-1.");
     }
     
-    // Remove common unwanted elements
-    removeCommonUnwantedElements(tempDiv);
-    
-    // Apply common styling
-    applyCommonStyling(tempDiv);
-    
-    // Extract and format publication date if available
+    // Extract and format publication date if available (from original article data)
     if (article.publishedTime) {
       try {
         const date = new Date(article.publishedTime);
@@ -109,9 +113,6 @@ export const defaultProcessor: ArticleProcessor = {
         result.publishDate = article.publishedTime;
       }
     }
-    
-    result.processedContent = tempDiv.innerHTML;
-    result.authorImage = authorImage;
     
     return result;
   }

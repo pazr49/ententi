@@ -12,20 +12,128 @@ export const nytProcessor: ArticleProcessor = {
       processedContent: article.content
     };
     
-    console.log("Processing NYT article");
+    console.log("Processing NYT article:", url);
     
-    // Create a temporary DOM element to manipulate the HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = article.content;
-    
-    // First remove common unwanted elements
-    removeCommonUnwantedElements(tempDiv);
-    
-    // Extract author image
+    // Create a temporary DOM element to hold the entire initial content
+    const tempHolder = document.createElement('div');
+    tempHolder.innerHTML = article.content;
+
+    // Find the main Readability container
+    const mainContainer = tempHolder.querySelector('#readability-page-1');
+
+    if (!mainContainer) {
+        console.warn('[NYT Processor] Could not find #readability-page-1 container. Processing may be unreliable.');
+        // Fallback to processing the entire tempHolder
+        removeCommonUnwantedElements(tempHolder);
+        // NYT-specific removals on tempHolder
+        tempHolder.querySelectorAll(
+            '#gateway-content, #site-content > [data-testid="optimistic-truncator"], [id*="truncator"], [data-testid="optimistic-truncator-message"], #top-wrapper, #bottom-wrapper, [data-testid="ad-container"], .css-pncxxs, [data-testid="share-tools"], [class*="social-tools"], #optimistic-truncator-a11y, [id*="optimistic-truncator"]').forEach(el => el.remove());
+        // Apply common styling
+        applyCommonStyling(tempHolder);
+        result.processedContent = tempHolder.innerHTML;
+    } else {
+        // --- Process within the main container --- 
+        console.log('[NYT Processor] Found #readability-page-1 container. Processing inside it.');
+
+        // First remove common unwanted elements *within* the main container
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
+
+        // NYT-specific cleanups *within* the main container
+        mainContainer.querySelectorAll(
+            '#gateway-content, #site-content > [data-testid="optimistic-truncator"], [id*="truncator"], [data-testid="optimistic-truncator-message"], #top-wrapper, #bottom-wrapper, [data-testid="ad-container"], .css-pncxxs, [data-testid="share-tools"], [class*="social-tools"], #optimistic-truncator-a11y, [id*="optimistic-truncator"]').forEach(el => el.remove());
+        
+        // --- Hero Image Logic within main container --- 
+        let hasHeroImage = false;
+        const existingImages = mainContainer.querySelectorAll('img');
+        console.log("NYT processor - existing images count inside mainContainer:", existingImages.length);
+        
+        if (existingImages.length > 0) {
+            // NYT articles usually have the main image in a figure at the beginning
+            const firstContentElement = mainContainer.firstElementChild;
+            if (firstContentElement) {
+                 const firstImg = firstContentElement.querySelector('img') || mainContainer.querySelector('img');
+                 if (firstImg) {
+                     const firstImgIndex = Array.from(firstContentElement.children).findIndex(el => el.contains(firstImg));
+                     hasHeroImage = firstImgIndex >= 0 && firstImgIndex < 5; // Check if image is among first few children
+                     console.log(`NYT processor - First image index within first content element (${firstContentElement.tagName}): ${firstImgIndex}, hasHeroImage: ${hasHeroImage}`);
+                 }
+            }
+        }
+        // Check if thumbnail matches existing image
+        if (!hasHeroImage && thumbnailUrl) {
+            existingImages.forEach(img => {
+                const imgBaseSrc = img.src.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
+                const thumbnailBaseSrc = thumbnailUrl.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
+                if (img.src === thumbnailUrl || imgBaseSrc === thumbnailBaseSrc) {
+                    hasHeroImage = true;
+                    console.log("Found matching thumbnail image in NYT article:", img.src);
+                }
+            });
+        }
+
+        // Add hero image *inside* the main container if needed
+        if (!hasHeroImage && thumbnailUrl) {
+            console.log("Adding hero image from thumbnail inside main container:", thumbnailUrl);
+            const figure = document.createElement('figure');
+            figure.className = 'hero-image';
+            const img = document.createElement('img');
+            img.src = thumbnailUrl;
+            img.alt = article.title;
+            img.className = 'hero-image-img';
+            figure.appendChild(img);
+            const figcaption = document.createElement('figcaption');
+            figcaption.textContent = 'Image: The New York Times'; // Standardize caption
+            figure.appendChild(figcaption);
+            // Prepend to the main container or its first child
+            const insertTarget = mainContainer.firstElementChild || mainContainer;
+            insertTarget.insertBefore(figure, insertTarget.firstChild);
+        }
+
+        // Improve image resolution
+        mainContainer.querySelectorAll('img[src*="nyt.com/images"], img[src*="nytimes.com/images"]').forEach(img => {
+            const src = img.getAttribute('src');
+            if (src) {
+                const highResSrc = src
+                    .replace('-articleLarge.jpg', '-jumbo.jpg')
+                    .replace('-thumbStandard.jpg', '-mediumThreeByTwo440.jpg')
+                    .replace('-master180.jpg', '-master675.jpg');
+                img.setAttribute('src', highResSrc);
+            }
+        });
+
+        // Apply common styling *to the main container*
+        applyCommonStyling(mainContainer as HTMLDivElement);
+
+        // Final cleanup for duplicate images within main container
+        const finalImages = mainContainer.querySelectorAll('figure img'); // Re-query images within the container
+        if (finalImages.length > 1) {
+            const uniqueImageSrcs = new Map<string, Element>();
+            const duplicatesToRemove: Element[] = [];
+            finalImages.forEach((img, index) => {
+                const baseSource = (img as HTMLImageElement).src.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
+                if (uniqueImageSrcs.has(baseSource)) {
+                    if (index > 0) { // Don't remove the first occurrence
+                        const figure = img.closest('figure');
+                        if (figure) duplicatesToRemove.push(figure);
+                    }
+                } else {
+                    uniqueImageSrcs.set(baseSource, img);
+                }
+            });
+            if (duplicatesToRemove.length > 0) {
+                console.log(`[NYT] Final cleanup: removing ${duplicatesToRemove.length} duplicate hero images from mainContainer`);
+                duplicatesToRemove.forEach(element => element.remove());
+            }
+        }
+
+        // --- Return innerHTML of the main container --- 
+        result.processedContent = mainContainer.innerHTML;
+        console.log("[NYT Processor] Successfully processed within #readability-page-1.");
+    }
+
+    // Extract author image (can be done on tempHolder)
     let authorImage: string | null = null;
-    
-    // Look for NYT author images (usually not included in the article content)
-    const authorElements = tempDiv.querySelectorAll('.css-1baulvz, [class*="byline-author"]');
+    const authorElements = tempHolder.querySelectorAll('.css-1baulvz, [class*="byline-author"]');
     if (authorElements.length > 0) {
       const authorElement = authorElements[0];
       const img = authorElement.querySelector('img');
@@ -34,186 +142,9 @@ export const nytProcessor: ArticleProcessor = {
         console.log("Found NYT author image:", authorImage);
       }
     }
+    result.authorImage = authorImage;
     
-    // NYT-specific cleanups
-    
-    // Remove paywalls and subscription prompts
-    const paywallElements = tempDiv.querySelectorAll(
-      '#gateway-content, #site-content > [data-testid="optimistic-truncator"], [id*="truncator"], [data-testid="optimistic-truncator-message"]'
-    );
-    paywallElements.forEach(el => el.remove());
-    
-    // Remove advertisement containers
-    const adElements = tempDiv.querySelectorAll('#top-wrapper, #bottom-wrapper, [data-testid="ad-container"]');
-    adElements.forEach(el => el.remove());
-    
-    // Remove social sharing elements
-    const socialElements = tempDiv.querySelectorAll('.css-pncxxs, [data-testid="share-tools"], [class*="social-tools"]');
-    socialElements.forEach(el => el.remove());
-    
-    // Remove Optimistic Reader message
-    const optimisticElements = tempDiv.querySelectorAll('#optimistic-truncator-a11y, [id*="optimistic-truncator"]');
-    optimisticElements.forEach(el => el.remove());
-    
-    // Check if we already have a hero image
-    // NYT articles typically already have a hero image at the beginning
-    let hasHeroImage = false;
-    const existingImages = tempDiv.querySelectorAll('img');
-    
-    console.log("NYT processor - existing images count:", existingImages.length);
-    
-    if (existingImages.length > 0) {
-      // Log first few images for debugging
-      console.log("First few images in NYT article:");
-      for (let i = 0; i < Math.min(3, existingImages.length); i++) {
-        console.log(`Image ${i+1} src:`, existingImages[i].src);
-      }
-      
-      // NYT articles usually have the main image in a figure at the beginning
-      // Check if there's an image in the first few elements
-      const firstImgIndex = Array.from(tempDiv.children).findIndex(el => el.querySelector('img'));
-      
-      // NYT articles typically place the hero image at the beginning
-      hasHeroImage = firstImgIndex < 5;
-      console.log("NYT article has hero image based on position:", hasHeroImage);
-      
-      // Also check if any of the existing images match the thumbnail
-      if (thumbnailUrl) {
-        // Track images to mark as duplicates
-        const duplicateImages: Element[] = [];
-        
-        existingImages.forEach(img => {
-          // For NYT, compare base URLs without sizes/dimensions
-          const imgBaseSrc = img.src.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
-          const thumbnailBaseSrc = thumbnailUrl.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
-          
-          const isMatchingImage = img.src === thumbnailUrl || 
-             (thumbnailUrl.includes('nyt.com/images') && img.src.includes('nyt.com/images')) ||
-             imgBaseSrc === thumbnailBaseSrc;
-          
-          if (isMatchingImage) {
-            hasHeroImage = true;
-            console.log("Found matching image in NYT article:", img.src);
-            
-            // Add to duplicates list except for the first one
-            if (duplicateImages.length > 0) {
-              duplicateImages.push(img);
-            } else {
-              // Mark this as the main image by enhancing its figure
-              const figure = img.closest('figure');
-              if (figure) {
-                figure.classList.add('hero-image');
-                img.classList.add('hero-image-img');
-                
-                // Remove any existing caption and add our standard one
-                const existingCaption = figure.querySelector('figcaption');
-                if (existingCaption) {
-                  const captionText = existingCaption.textContent || '';
-                  if (!captionText.includes('The New York Times')) {
-                    existingCaption.textContent = captionText + ' | The New York Times';
-                  }
-                }
-              }
-            }
-          }
-        });
-        
-        // Remove duplicate images
-        if (duplicateImages.length > 0) {
-          console.log(`Removing ${duplicateImages.length} duplicate NYT images`);
-          duplicateImages.forEach(img => {
-            const figure = img.closest('figure');
-            if (figure) {
-              figure.remove();
-            } else {
-              img.remove();
-            }
-          });
-        }
-      }
-    }
-    
-    // Only add hero image if we determined there isn't one already present
-    // This prevents duplicate images in NYT articles
-    if (!hasHeroImage && thumbnailUrl) {
-      console.log("Adding hero image from thumbnail:", thumbnailUrl);
-      
-      // Create figure and image elements
-      const figure = document.createElement('figure');
-      figure.className = 'hero-image';
-      
-      const img = document.createElement('img');
-      img.src = thumbnailUrl;
-      img.alt = article.title;
-      img.className = 'hero-image-img';
-      
-      figure.appendChild(img);
-      
-      // Add caption if this is from NYT
-      const figcaption = document.createElement('figcaption');
-      figcaption.className = 'hero-image-caption';
-      figcaption.textContent = 'Image: The New York Times';
-      figure.appendChild(figcaption);
-      
-      // Add the hero image to the beginning of the content
-      if (tempDiv.firstChild) {
-        tempDiv.insertBefore(figure, tempDiv.firstChild);
-      } else {
-        tempDiv.appendChild(figure);
-      }
-    }
-    
-    // Improve image resolution - replace low-res with high-res versions
-    const nytImages = tempDiv.querySelectorAll('img[src*="nyt.com/images"], img[src*="nytimes.com/images"]');
-    nytImages.forEach(img => {
-      const src = img.getAttribute('src');
-      if (src) {
-        // Replace lower quality with higher quality versions
-        const highResSrc = src
-          .replace('-articleLarge.jpg', '-jumbo.jpg')
-          .replace('-thumbStandard.jpg', '-mediumThreeByTwo440.jpg')
-          .replace('-master180.jpg', '-master675.jpg');
-        
-        img.setAttribute('src', highResSrc);
-      }
-    });
-    
-    // Apply common styling
-    applyCommonStyling(tempDiv);
-    
-    // Final cleanup - check for duplicate hero images that might still exist
-    // This is a last resort check for NYT articles that often have the same image twice
-    const heroImages = tempDiv.querySelectorAll('figure img');
-    if (heroImages.length > 1) {
-      // Create a map to track unique image base URLs
-      const uniqueImageSrcs = new Map<string, Element>();
-      const duplicatesToRemove: Element[] = [];
-      
-      heroImages.forEach((img, index) => {
-        // Get base source without dimensions/size parameters
-        const baseSource = (img as HTMLImageElement).src.split('?')[0].replace(/-articleLarge\.jpg|-jumbo\.jpg|-superJumbo\.jpg|-master\d+\.jpg/g, '');
-        
-        if (uniqueImageSrcs.has(baseSource)) {
-          // Second occurrence is likely a duplicate
-          if (index > 0) {
-            const figure = img.closest('figure');
-            if (figure) {
-              duplicatesToRemove.push(figure);
-            }
-          }
-        } else {
-          uniqueImageSrcs.set(baseSource, img);
-        }
-      });
-      
-      // Remove duplicates - but only if they appear to be the same image
-      if (duplicatesToRemove.length > 0) {
-        console.log(`[NYT] Final cleanup: removing ${duplicatesToRemove.length} duplicate hero images`);
-        duplicatesToRemove.forEach(element => element.remove());
-      }
-    }
-    
-    // Format and extract date if available
+    // Format and extract date if available (from original article data)
     if (article.publishedTime) {
       try {
         const date = new Date(article.publishedTime);
@@ -230,9 +161,6 @@ export const nytProcessor: ArticleProcessor = {
         result.publishDate = article.publishedTime;
       }
     }
-    
-    result.processedContent = tempDiv.innerHTML;
-    result.authorImage = authorImage;
     
     return result;
   }
