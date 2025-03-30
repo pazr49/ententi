@@ -10,7 +10,7 @@ import ArticleToolbar from './ArticleReader/ArticleToolbar';
 import ArticleMeta from './ArticleReader/ArticleMeta';
 import TTSPlayer from './ArticleReader/TTSPlayer';
 import { extractArticleText } from './ArticleReader/utils';
-import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import TranslationSettings from '@/components/ui/TranslationSettings';
 
 interface StreamChunk {
@@ -30,6 +30,43 @@ interface ArticleReaderProps {
   originalUrl?: string;
   thumbnailUrl?: string;
 }
+
+// --- Helper function to check for direct figure child (Mirrors backend) ---
+const hasDirectFigureChild = (element: Element): boolean => {
+  if (!element || !element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
+    console.warn("[FRONTEND_PARSE_HELPER] Element does not have iterable childNodes:", element.outerHTML?.substring(0,50));
+    return false; 
+  }
+  try {
+    for (const child of Array.from(element.childNodes)) { // Use Array.from for browser compatibility
+      if (child && child.nodeType === Node.ELEMENT_NODE) {
+        const childElement = child as Element;
+        if (childElement.tagName && childElement.tagName.toLowerCase() === 'figure') {
+          return true;
+        }
+      }
+    }
+  } catch(e) {
+    console.error("[FRONTEND_PARSE_HELPER] Error iterating childNodes for:", element.outerHTML?.substring(0,50), e);
+  }
+  return false;
+};
+
+// --- Helper function to check if an element should be preserved (Mirrors backend) ---
+const isPreservable = (element: Element): boolean => {
+  const tagName = element.tagName.toLowerCase();
+  return (
+    // 1. Check for NYT image wrapper divs
+    (tagName === 'div' && element.getAttribute('data-testid') === 'imageblock-wrapper') ||
+    // 2. Check for divs containing figures (New Statesman style)
+    (tagName === 'div' && hasDirectFigureChild(element)) ||
+    // 3. Check for standard figure elements
+    tagName === 'figure' ||
+    // 4. Check for video placeholders
+    (tagName === 'div' && element.classList.contains('video-placeholder'))
+    // Add other specific publication selectors here
+  );
+};
 
 export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl }: ArticleReaderProps) {
   // UI state
@@ -52,7 +89,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   
   // Supabase context
   const supabase = useSupabaseClient();
-  const user = useUser();
 
   // TTS hook
   const tts = useTTS({ 
@@ -247,117 +283,58 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     setCurrentSentence('');
   };
 
-  // --- NEW: Function to parse and store preserved nodes ---
+  // --- NEW: Function to parse and store preserved nodes --- 
+  // Now uses the synchronized isPreservable logic
   const parseAndStorePreservedNodes = (htmlContent: string): Map<string, string> => {
-    console.log("[FRONTEND_PREPARSE] Starting to parse original HTML for preserved nodes...");
+    console.log("[FRONTEND_PREPARSE_SYNC] Starting to parse original HTML for preserved nodes...");
     const map = new Map<string, string>();
     if (!htmlContent) return map;
+
+    let preservedNodeIndex = 0; 
+
+    const processNodesRecursively = (element: Element) => {
+        if (!element || !element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
+            console.warn("[FRONTEND_PREPARSE_RECURSE] Element has no iterable childNodes:", element?.tagName);
+            return; 
+        }
+
+        Array.from(element.childNodes).forEach((childNode: Node) => { // Use Array.from
+          if (childNode.nodeType === Node.ELEMENT_NODE) {
+            const childElement = childNode as Element;
+            const childTagName = childElement.tagName.toLowerCase();
+            const shortHTML = childElement.outerHTML?.substring(0, 100).replace(/\n/g, '') + (childElement.outerHTML?.length > 100 ? '...' : '');
+
+            if (isPreservable(childElement)) {
+              const key = `preserved-${preservedNodeIndex}`;
+              console.log(`[FRONTEND_PREPARSE_RECURSE] Storing PRESERVED node <${childTagName}> with key '${key}': ${shortHTML}`);
+              map.set(key, childElement.outerHTML);
+              preservedNodeIndex++;
+            } else if (['div', 'article', 'section', 'main', 'header', 'footer', 'aside'].includes(childTagName)) {
+              // Only recurse if it's a container and *not* preservable itself
+              console.log(`[FRONTEND_PREPARSE_RECURSE] Recursing into container <${childTagName}>: ${shortHTML}`);
+              processNodesRecursively(childElement);
+            } else {
+               // console.log(`[FRONTEND_PREPARSE_RECURSE] Skipping non-preservable, non-container leaf node <${childTagName}>`);
+            }
+          } 
+          // We don't need to handle text nodes here, only identify preservable elements
+        });
+      };
 
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(htmlContent, 'text/html');
-      if (!doc || !doc.body) {
-          console.warn("[FRONTEND_PREPARSE] Failed to parse document body.");
-          return map;
+      const rootElement = doc?.getElementById('readability-page-1') || doc?.body;
+
+      if (rootElement) {
+          console.log(`[FRONTEND_PREPARSE_SYNC] Starting recursive processing from <${rootElement.tagName.toLowerCase()}>...`);
+          processNodesRecursively(rootElement);
+      } else {
+        console.warn("[FRONTEND_PREPARSE_SYNC] Failed to find root element (readability-page-1 or body).");
       }
-      
-      // --- MODIFIED LOGIC: Iterate directly through BODY children --- 
-      const bodyElement = doc.body;
-      if (!bodyElement) {
-          console.warn("[FRONTEND_PREPARSE] Document body not found after parsing.");
-          return map;
-      }
-
-      console.log(`[FRONTEND_PREPARSE] Iterating through childNodes of <BODY>...`);
-      let preservedNodeIndex = 0; // Reset index here
-
-      // Iterate through the BODY's direct children
-      bodyElement.childNodes.forEach((node: globalThis.Node, index: number) => {
-         // Focus only on ELEMENT nodes
-         if (node.nodeType === Node.ELEMENT_NODE) {
-             const element = node as Element;
-             const tagName = element.tagName.toLowerCase();
-             // --- ADDED CHECK: Handle the main readability div --- 
-             // If we encounter the main div (e.g., #readability-page-1), 
-             // we need to look *inside* it as well, because figures might be siblings
-             // OR content might be directly inside.
-             if (tagName === 'div' && element.id.startsWith('readability-page-')) {
-                 console.log(`[FRONTEND_PREPARSE] Found main container <div id='${element.id}'> at body level ${index + 1}. Processing its children...`);
-                 // Iterate through the children of THIS div
-                 element.childNodes.forEach((innerNode: globalThis.Node, innerIndex: number) => {
-                     if (innerNode.nodeType === Node.ELEMENT_NODE) {
-                         const innerElement = innerNode as Element;
-                         const innerTagName = innerElement.tagName.toLowerCase();
-                         const innerOuterHTML = innerElement.outerHTML;
-                         const innerShortHTML = innerOuterHTML?.substring(0, 100).replace(/\n/g, '') + (innerOuterHTML?.length > 100 ? '...' : '');
-
-                         if (!innerOuterHTML || !innerOuterHTML.trim()) return; // Skip empty
-                         
-                         // Check if the INNER element is preservable
-                         if (innerTagName === 'figure' || innerTagName === 'img' || (innerTagName === 'div' && innerElement.classList.contains('video-placeholder'))) {
-                             const key = `preserved-${preservedNodeIndex}`;
-                             console.log(`[FRONTEND_PREPARSE] Storing PRESERVED node inside container (index ${innerIndex + 1}) with key '${key}': ${innerShortHTML}`);
-                             map.set(key, innerOuterHTML);
-                             preservedNodeIndex++;
-                         } else {
-                             // If it's an <article> or <main> inside the div, process its children too (recursive step)
-                             if (['article', 'main'].includes(innerTagName)) {
-                                 console.log(`[FRONTEND_PREPARSE] Found <${innerTagName}> inside container. Processing its children...`);
-                                 innerElement.childNodes.forEach((articleNode: globalThis.Node, articleIndex: number) => {
-                                     if (articleNode.nodeType === Node.ELEMENT_NODE) {
-                                         const articleElement = articleNode as Element;
-                                         const articleTagName = articleElement.tagName.toLowerCase();
-                                         const articleOuterHTML = articleElement.outerHTML;
-                                         const articleShortHTML = articleOuterHTML?.substring(0, 100).replace(/\n/g, '') + (articleOuterHTML?.length > 100 ? '...' : '');
-
-                                         if (!articleOuterHTML || !articleOuterHTML.trim()) return; // Skip empty
-                                         
-                                         if (articleTagName === 'figure' || articleTagName === 'img' || (articleTagName === 'div' && articleElement.classList.contains('video-placeholder'))) {
-                                             const key = `preserved-${preservedNodeIndex}`;
-                                             console.log(`[FRONTEND_PREPARSE] Storing PRESERVED node inside <${innerTagName}> (index ${articleIndex + 1}) with key '${key}': ${articleShortHTML}`);
-                                             map.set(key, articleOuterHTML);
-                                             preservedNodeIndex++;
-                                         } else {
-                                             console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE node inside <${innerTagName}> (index ${articleIndex + 1}, tag: ${articleTagName})`);
-                                         }
-                                     }
-                                 });
-                             } else {
-                                console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE node inside container (index ${innerIndex + 1}, tag: ${innerTagName})`);
-                             }
-                         }
-                     }
-                 });
-                 // Skip processing the div itself further down
-                 return; 
-             }
-             
-             // --- Original Check for top-level elements (like figures that are siblings to the main div) ---
-             const outerHTML = element.outerHTML;
-             const shortHTML = outerHTML?.substring(0, 100).replace(/\n/g, '') + (outerHTML?.length > 100 ? '...' : '');
-
-             if (!outerHTML || !outerHTML.trim()) return; // Skip empty
-
-             // Identify preserved elements at the BODY level
-             if (tagName === 'figure' || tagName === 'img' || (tagName === 'div' && element.classList.contains('video-placeholder'))) {
-                 const key = `preserved-${preservedNodeIndex}`;
-                 console.log(`[FRONTEND_PREPARSE] Storing PRESERVED body-level node ${index+1} with key '${key}': ${shortHTML}`);
-                 map.set(key, outerHTML);
-                 preservedNodeIndex++;
-             } else {
-                 console.log(`[FRONTEND_PREPARSE] Skipping TRANSLATABLE body-level node ${index+1} (tag: ${tagName})`);
-             }
-         } else if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
-             const shortText = node.textContent.trim().substring(0,50) + (node.textContent.trim().length > 50 ? '...' : '');
-             console.log(`[FRONTEND_PREPARSE] Skipping TEXT body-level node ${index+1}: "${shortText}"`);
-         } else {
-              const skippedTagName = (node as Element).tagName?.toLowerCase() || 'N/A';
-              console.log(`[FRONTEND_PREPARSE] Skipping OTHER body-level node ${index+1} (type: ${node.nodeType}, tag: ${skippedTagName})`);
-         }
-      });
-      console.log(`[FRONTEND_PREPARSE] Finished parsing. Stored ${map.size} preserved nodes locally.`);
+      console.log(`[FRONTEND_PREPARSE_SYNC] Finished parsing. Stored ${map.size} preserved nodes locally.`);
     } catch (error) {
-       console.error("[FRONTEND_PREPARSE] Error parsing original HTML:", error);
+       console.error("[FRONTEND_PREPARSE_SYNC] Error parsing original HTML:", error);
     }
     return map;
   };
@@ -423,6 +400,10 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
       // Define API endpoint URL (replace with your actual URL if different)
       const apiUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/translate-article`;
+
+      // --- ADD THIS LOG (Corrected Syntax) ---
+      console.log('[FRONTEND_SENDING_CONTENT] Full content being sent to backend:', contentToTranslate);
+      // --- END ADD LOG ---
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -514,6 +495,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
               // Use the local map directly
               const preservedHtml = localPreservedMap.get(refKey); 
               if (preservedHtml) {
+                console.log(`[FRONTEND_APPEND_PRESERVED] Ref: '${refKey}', Appending HTML (first 200 chars):`, preservedHtml.substring(0, 200));
                 console.log(`[FRONTEND] Appending PRESERVED chunk ${receivedChunkCount} using ref '${refKey}'. HTML: ${preservedHtml.substring(0,100)}...`);
                 setFinalStreamedContent(prev => prev + preservedHtml);
               } else {
@@ -531,12 +513,17 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
         }
       } // End of while loop reading stream
 
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: Error | unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         console.log('Translation request cancelled.');
       } else {
         console.error("[FRONTEND] Error during translation fetch/stream:", error);
-        setTranslationError(error.message || "An unknown error occurred during translation.");
+        // Construct a user-friendly message
+        let errorMessage = "An unknown error occurred during translation.";
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        setTranslationError(errorMessage);
       }
     } finally {
       setIsStreaming(false);

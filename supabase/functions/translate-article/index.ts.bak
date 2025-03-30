@@ -92,127 +92,109 @@ interface ProcessedNode {
   html: string;
 }
 
-// --- Helper function to check for direct figure child ---
-const hasDirectFigureChild = (element: Element): boolean => {
-  // Check if element itself is null or undefined before accessing childNodes
-  if (!element) return false; 
-  // Check if childNodes exists and is iterable
-  if (!element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
-      console.warn("[PARSE_HELPER] Element does not have iterable childNodes:", element.outerHTML?.substring(0,50));
-      return false; 
-  }
-  
-  try {
-      for (const child of element.childNodes) {
-          // Ensure child and nodeType are accessible
-          if (child && child.nodeType === Node.ELEMENT_NODE) {
-              const childElement = child as Element;
-              // Ensure tagName is accessible
-              if (childElement.tagName && childElement.tagName.toLowerCase() === 'figure') {
-                  return true;
-              }
-          }
-      }
-  } catch(e) {
-      console.error("[PARSE_HELPER] Error iterating childNodes for:", element.outerHTML?.substring(0,50), e);
-  }
-  return false;
-};
-
-// --- NEW: Helper function to check if an element should be preserved ---
-const isPreservable = (element: Element): boolean => {
-  const tagName = element.tagName.toLowerCase();
-  return (
-    // 1. Check for NYT image wrapper divs
-    (tagName === 'div' && element.getAttribute('data-testid') === 'imageblock-wrapper') ||
-    // 2. Check for divs containing figures (New Statesman style)
-    (tagName === 'div' && hasDirectFigureChild(element)) ||
-    // 3. Check for standard figure elements
-    tagName === 'figure' ||
-    // 4. Check for video placeholders
-    (tagName === 'div' && element.classList.contains('video-placeholder'))
-    // Add other specific publication selectors here
-  );
-};
-
-// --- REFACTORED Function to parse HTML and identify nodes recursively ---
+// --- UPDATED Function to parse HTML and identify nodes (Mirroring Frontend) ---
 function parseHtmlAndIdentifyNodes(html: string): ProcessedNode[] {
-  console.log("[PARSE_REFACTORED] Starting HTML parsing (recursive strategy)...");
+  console.log("[PARSE] Starting HTML parsing (body iteration strategy)...");
   const nodes: ProcessedNode[] = [];
-  let preservedNodeCounter = 0; // Counter used for potential future reference needs
-
-  const processNodesRecursively = (element: Element) => {
-    if (!element || !element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
-        console.warn("[PARSE_RECURSE] Element has no iterable childNodes:", element?.tagName);
-        return; 
-    }
-
-    element.childNodes.forEach((childNode: Node, childIndex: number) => {
-      // --- ADD DETAILED LOGGING ---
-      let nodeType = childNode.nodeType;
-      let nodeInfo = `Child index ${childIndex}, Type: ${nodeType}`;
-      if (nodeType === Node.ELEMENT_NODE) {
-          nodeInfo += `, Tag: ${(childNode as Element).tagName?.toLowerCase()}`;
-      } else if (nodeType === Node.TEXT_NODE) {
-          nodeInfo += `, Text (trimmed): \"${childNode.textContent?.trim().substring(0,30)}...\"`;
-      }
-      console.log(`[PARSE_RECURSE_DETAIL] Processing node within <${element.tagName.toLowerCase()}>: ${nodeInfo}`);
-      // --- END LOGGING ---
-
-      if (childNode.nodeType === Node.ELEMENT_NODE) {
-        const childElement = childNode as Element;
-        const childTagName = childElement.tagName.toLowerCase();
-        const shortHTML = childElement.outerHTML?.substring(0, 100).replace(/\n/g, '') + (childElement.outerHTML?.length > 100 ? '...' : '');
-
-        if (isPreservable(childElement)) {
-          console.log(`[PARSE_RECURSE] Identified PRESERVED node <${childTagName}>: ${shortHTML}`);
-          nodes.push({ type: 'preserved', html: childElement.outerHTML });
-          preservedNodeCounter++; // Increment counter
-        } else if (['div', 'article', 'section', 'main', 'header', 'footer', 'aside'].includes(childTagName)) {
-           // Recurse into container-like elements that aren't preserved
-           console.log(`[PARSE_RECURSE] Recursing into container <${childTagName}>: ${shortHTML}`);
-           processNodesRecursively(childElement);
-        } else {
-           // Treat other elements (p, h*, ul, li, blockquote, pre, table, etc.) as translatable leaves
-           if (childElement.outerHTML && childElement.outerHTML.trim()) {
-               console.log(`[PARSE_RECURSE] Identified TRANSLATABLE leaf node <${childTagName}>: ${shortHTML}`);
-               nodes.push({ type: 'translatable', html: childElement.outerHTML });
-           } else {
-               console.log(`[PARSE_RECURSE] Skipping empty leaf node <${childTagName}>`);
-           }
-        }
-      } else if (childNode.nodeType === Node.TEXT_NODE && childNode.textContent?.trim()) {
-         // Wrap stray text in <p>
-         const textContent = childNode.textContent.trim();
-         const shortText = textContent.substring(0,50) + (textContent.length > 50 ? '...' : '');
-         console.log(`[PARSE_RECURSE] Identified stray text, wrapping in <p>: "${shortText}"`);
-         nodes.push({ type: 'translatable', html: `<p>${textContent}</p>` });
-      } else {
-         // Skip comments, other node types, etc.
-         // console.log(`[PARSE_RECURSE] Skipping OTHER node type: ${childNode.nodeType}`);
-      }
-    });
-  };
-
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Start processing from the body to handle potentially malformed structures
-    const rootElement = doc?.body; // Changed starting point from getElementById
+    const bodyElement = doc?.body;
 
-    if (rootElement) {
-        console.log(`[PARSE_REFACTORED] Starting recursive processing from <${rootElement.tagName.toLowerCase()}>...`);
-        processNodesRecursively(rootElement); // Start recursion
-    } else {
-      console.warn("[PARSE_REFACTORED] Failed to find root element (body). Treating entire content as one block.");
+    if (!bodyElement) {
+      console.warn("[PARSE] Failed to parse or find document body. Treating entire content as one block.");
       return [{ type: 'translatable', html }];
     }
 
+    console.log(`[PARSE] Iterating through childNodes of <BODY>...`);
+
+    // Helper function to check if an element should be preserved
+    const shouldPreserveElement = (element: Element): boolean => {
+      const tagName = element.tagName.toLowerCase();
+      
+      // Check for simple image/figure cases
+      if (tagName === 'figure' || tagName === 'img') return true;
+      
+      // Check for video placeholders
+      if (tagName === 'div' && element.classList.contains('video-placeholder')) return true;
+      
+      // Check for data-testid attributes (common in NYT, WaPo, etc.)
+      if (element.hasAttribute('data-testid')) {
+        const testId = element.getAttribute('data-testid')?.toLowerCase() || '';
+        if (testId.includes('image') || testId.includes('photo') || testId.includes('media') || 
+            testId === 'imageblock-wrapper' || testId === 'photoviewer-wrapper') {
+          return true;
+        }
+      }
+      
+      // Check for class names that indicate images
+      const classNames = element.className || '';
+      if (classNames.includes('image-container') || classNames.includes('figure') || 
+          classNames.includes('picture-wrapper') || classNames.includes('media-wrapper')) {
+        return true;
+      }
+      
+      // Check if element contains an img
+      if (element.querySelector('img') || element.querySelector('picture')) {
+        // If it's a small container (e.g., <a> with an img), don't consider it a major image block
+        if (tagName !== 'a' && tagName !== 'span') {
+          return true;
+        }
+      }
+      
+      return false;
+    };
+
+    // Function to process a node and check if it or its children should be preserved
+    const processNode = (node: Node, context: string): void => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      
+      const element = node as Element;
+      const tagName = element.tagName.toLowerCase();
+      const outerHTML = element.outerHTML;
+      
+      if (!outerHTML || !outerHTML.trim()) return; // Skip empty
+      
+      // Check if this element should be preserved
+      if (shouldPreserveElement(element)) {
+        const shortHTML = outerHTML.substring(0, 100).replace(/\n/g, '') + (outerHTML.length > 100 ? '...' : '');
+        console.log(`[PARSE] Identified PRESERVED node in ${context}: ${shortHTML}`);
+        nodes.push({ type: 'preserved', html: outerHTML });
+        return; // If we preserve the parent, no need to check children
+      }
+      
+      // Special handling for main readability div
+      if (tagName === 'div' && element.id.startsWith('readability-page-')) {
+        console.log(`[PARSE] Found main container <div id='${element.id}'> in ${context}. Processing its children...`);
+        element.childNodes.forEach((childNode: Node, childIndex: number) => {
+          processNode(childNode, `${context} > readability-div[${childIndex}]`);
+        });
+        return;
+      }
+      
+      // For article/main/section/div elements, process their children recursively
+      if (['article', 'main', 'section', 'div'].includes(tagName)) {
+        element.childNodes.forEach((childNode: Node, childIndex: number) => {
+          processNode(childNode, `${context} > ${tagName}[${childIndex}]`);
+        });
+        return;
+      }
+      
+      // Handle regular translatable content
+      console.log(`[PARSE] Identified TRANSLATABLE node in ${context}: ${outerHTML.substring(0, 100)}...`);
+      nodes.push({ type: 'translatable', html: outerHTML });
+    };
+
+    // Process body's direct children
+    bodyElement.childNodes.forEach((node: Node, index: number) => {
+      processNode(node, `body[${index}]`);
+    });
+
   } catch (e) {
-    console.error("[PARSE_REFACTORED] Error during HTML parsing:", e);
-    console.warn("[PARSE_REFACTORED] Falling back to treating entire content as one translatable block.");
+    console.error("[PARSE] Error during HTML parsing:", e);
+    console.warn("[PARSE] Falling back to treating entire content as one translatable block.");
     return [{ type: 'translatable', html }];
   }
-  console.log(`[PARSE_REFACTORED] Finished parsing. Identified ${nodes.length} nodes for processing.`);
+  console.log(`[PARSE] Finished parsing. Identified ${nodes.length} nodes for processing.`);
   return nodes;
 }
 
@@ -296,8 +278,7 @@ async function streamTranslateSingleNode(
   }
 }
 
-// --- UPDATED CORE PROCESSING FUNCTION --- 
-// (This function now primarily calls the refactored parser and the existing streamTranslateSingleNode)
+// --- UPDATED CORE PROCESSING FUNCTION ---
 async function processAndStreamArticle(
   articleHtml: string,
   model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
@@ -306,16 +287,16 @@ async function processAndStreamArticle(
   dialectInfo: string,
   controller: ReadableStreamController<Uint8Array>
 ) {
-  // Parse nodes using the new recursive function
+  // Parse nodes first - This will now parse deeper
   const nodes = parseHtmlAndIdentifyNodes(articleHtml);
   const encoder = new TextEncoder();
-  let preservedNodeCounter = 0; // Reset counter for generating refs
+  let preservedNodeCounter = 0; // Counter for generating preserved node keys
 
-  console.log(`[PROCESS_STREAM_REFACTORED] Starting to process ${nodes.length} identified nodes using reference method.`);
+  console.log(`[PROCESS_STREAM] Starting to process ${nodes.length} identified nodes using reference method.`);
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-    console.log(`[PROCESS_STREAM_REFACTORED] Processing node ${i + 1}/${nodes.length}, type: ${node.type}`);
+    console.log(`[PROCESS_STREAM] Processing node ${i + 1}/${nodes.length}, type: ${node.type}`);
 
     if (node.type === 'preserved') {
       // Generate the reference key matching the frontend logic
@@ -325,13 +306,13 @@ async function processAndStreamArticle(
       // Construct the reference object
       const refChunk = { preservedRef: refKey };
       
-      console.log(`[PROCESS_STREAM_REFACTORED] Enqueueing PRESERVED node ${i + 1} reference: ${JSON.stringify(refChunk)}`);
+      console.log(`[PROCESS_STREAM] Enqueueing PRESERVED node ${i + 1} reference: ${JSON.stringify(refChunk)}`);
       // Send the reference object as JSON, followed by a newline
       controller.enqueue(encoder.encode(JSON.stringify(refChunk) + '\n'));
 
     } else if (node.type === 'translatable') {
       // Handle translatable nodes by streaming their translation
-      console.log(`[PROCESS_STREAM_REFACTORED] Starting translation for TRANSLATABLE node ${i + 1}: ${node.html.substring(0, 80)}...`);
+      console.log(`[PROCESS_STREAM] Starting translation for TRANSLATABLE node ${i + 1}: ${node.html.substring(0, 80)}...`);
       await streamTranslateSingleNode(
         node.html,
         model,
@@ -340,10 +321,12 @@ async function processAndStreamArticle(
         dialectInfo,
         controller
       );
-      console.log(`[PROCESS_STREAM_REFACTORED] Finished translation for TRANSLATABLE node ${i + 1}`);
+      console.log(`[PROCESS_STREAM] Finished translation for TRANSLATABLE node ${i + 1}`);
     }
+    // Note: No 'else' needed as parseHtmlAndIdentifyNodes should only return these two types
+    // or an error would have occurred earlier.
   }
-  console.log("[PROCESS_STREAM_REFACTORED] Finished processing and streaming all nodes.");
+  console.log("[PROCESS_STREAM] Finished processing and streaming all nodes.");
 }
 
 // Serve Function (largely the same, calls the updated processAndStreamArticle)
