@@ -31,27 +31,6 @@ interface ArticleReaderProps {
   thumbnailUrl?: string;
 }
 
-// --- Helper function to check for direct figure child (Mirrors backend) ---
-const hasDirectFigureChild = (element: Element): boolean => {
-  if (!element || !element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
-    console.warn("[FRONTEND_PARSE_HELPER] Element does not have iterable childNodes:", element.outerHTML?.substring(0,50));
-    return false; 
-  }
-  try {
-    for (const child of Array.from(element.childNodes)) { // Use Array.from for browser compatibility
-      if (child && child.nodeType === Node.ELEMENT_NODE) {
-        const childElement = child as Element;
-        if (childElement.tagName && childElement.tagName.toLowerCase() === 'figure') {
-          return true;
-        }
-      }
-    }
-  } catch(e) {
-    console.error("[FRONTEND_PARSE_HELPER] Error iterating childNodes for:", element.outerHTML?.substring(0,50), e);
-  }
-  return false;
-};
-
 // --- Helper function to check if an element should be preserved (Mirrors backend) ---
 const isPreservable = (element: Element): boolean => {
   const tagName = element.tagName.toLowerCase();
@@ -59,7 +38,7 @@ const isPreservable = (element: Element): boolean => {
     // 1. Check for NYT image wrapper divs
     (tagName === 'div' && element.getAttribute('data-testid') === 'imageblock-wrapper') ||
     // 2. Check for divs containing figures (New Statesman style)
-    (tagName === 'div' && hasDirectFigureChild(element)) ||
+    // (tagName === 'div' && hasDirectFigureChild(element)) ||
     // 3. Check for standard figure elements
     tagName === 'figure' ||
     // 4. Check for video placeholders
@@ -103,6 +82,8 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [finalStreamedContent, setFinalStreamedContent] = useState<string>('');
   const [translationError, setTranslationError] = useState<string | null>(null);
+  const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
+  const [showOldContent, setShowOldContent] = useState<boolean>(true);
 
   // Detect Paul Graham articles
   useEffect(() => {
@@ -310,14 +291,15 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
               map.set(key, childElement.outerHTML);
               preservedNodeIndex++;
             } else if (['div', 'article', 'section', 'main', 'header', 'footer', 'aside'].includes(childTagName)) {
-              // Only recurse if it's a container and *not* preservable itself
-              console.log(`[FRONTEND_PREPARSE_RECURSE] Recursing into container <${childTagName}>: ${shortHTML}`);
+              console.log(`[FRONTEND_PREPARSE_RECURSE] Recursing into non-preservable container <${childTagName}>: ${shortHTML}`);
               processNodesRecursively(childElement);
             } else {
-               // console.log(`[FRONTEND_PREPARSE_RECURSE] Skipping non-preservable, non-container leaf node <${childTagName}>`);
+               // If it's any other element (leaf node like p, h*, etc.) and not preservable, just ignore it.
+               // We only care about finding and mapping the *preservable* elements here.
+               // console.log(`[FRONTEND_PREPARSE_RECURSE] Skipping non-preservable leaf node <${childTagName}>`);
             }
           } 
-          // We don't need to handle text nodes here, only identify preservable elements
+          // We don't need to handle text nodes here for mapping preservables
         });
       };
 
@@ -343,7 +325,13 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const handleRealTranslate = async (language: string, readingAge: string, region?: string) => {
     // Check if article content exists
     if (!article || !article.content || isStreaming) return; 
-
+    // Trigger fade-out effect for smoother transition
+    setIsFadingOut(true);
+    setTimeout(() => {
+      setShowOldContent(false);
+      setIsFadingOut(false);
+    }, 300);
+    
     // --- PROCESS ARTICLE CONTENT HERE --- 
     let contentToTranslate = article.content;
     let processedAuthorImage = null; // Keep track of author image from processing
@@ -537,15 +525,15 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     if (isStreaming && abortControllerRef.current) {
       abortControllerRef.current.abort();
       console.log("Attempting to cancel translation...");
-      // State updates (like isStreaming=false) happen in the finally block of handleRealTranslate
+      setShowOldContent(true);
+      setIsFadingOut(false);
     }
   };
 
   // Choose content to display
-  // --- UPDATED: Prioritize final streamed, then initial processed, then raw --- 
-  const contentToDisplay = finalStreamedContent
-    ? finalEnhancedContentMemo
-    : (initialProcessedContent ? initialEnhancedContentMemo : (article?.content || ''));
+  const contentToDisplay = showOldContent
+    ? (initialProcessedContent ? initialEnhancedContentMemo : (article?.content || ''))
+    : finalEnhancedContentMemo;
   
   const displayTitle = finalStreamedContent 
     ? streamedTitle
@@ -637,7 +625,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           
           <div className="relative" ref={articleContentRef}>
             <div 
-              className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''}`}
+              className={`prose ${isDarkMode ? 'prose-invert' : ''} max-w-none ${fontSize} article-content ${isPaulGrahamArticle ? 'pg-article' : ''} ${isFadingOut ? 'content-fade-out' : 'content-fade-in'}`}
               dangerouslySetInnerHTML={{ __html: contentToDisplay }}
               onClick={handleWordClick}
             />
@@ -698,7 +686,7 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       
       .article-content figure {
         margin: 1.5rem 0;
-        /* position: relative; */ /* Remove relative positioning from figure */
+        /* position: relative; */
       }
       
       /* Add relative positioning to the image block div */
@@ -816,7 +804,7 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       @keyframes fadeIn {
         from {
           opacity: 0;
-          transform: translateY(10px); /* Slight upward movement */
+          transform: translateY(10px);
         }
         to {
           opacity: 1;
@@ -825,98 +813,21 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       }
       
       .fade-in-chunk {
-        /* Apply animation with a slight delay between chunks if desired */
         animation: fadeIn 0.5s ease-out forwards;
-        /* margin-bottom: 1rem; Add space between chunks if needed */
       }
       
-      /* Custom range slider styling */
-      input[type="range"] {
-        -webkit-appearance: none;
-        appearance: none;
-        height: 4px;
-        border-radius: 4px;
-        outline: none;
-        position: relative;
-        z-index: 10;
+      /* New fade effect for content transition */
+      .article-content.content-fade-out {
+        animation: fadeOut 0.3s ease-out forwards;
       }
       
-      input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        background-color: ${isDarkMode ? '#818cf8' : '#4f46e5'};
-        border-radius: 50%;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        position: relative;
-        z-index: 20;
+      .article-content.content-fade-in {
+        animation: fadeIn 0.5s ease-out forwards;
       }
       
-      input[type="range"]::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        background-color: ${isDarkMode ? '#818cf8' : '#4f46e5'};
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        position: relative;
-        z-index: 20;
-      }
-      
-      input[type="range"]::-webkit-slider-thumb:hover,
-      input[type="range"]::-moz-range-thumb:hover {
-        transform: scale(1.2);
-        box-shadow: 0 0 0 2px ${isDarkMode ? 'rgba(129, 140, 248, 0.3)' : 'rgba(79, 70, 229, 0.3)'};
-      }
-      
-      .skip-button {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      /* Style for video placeholders */
-      .video-placeholder {
-        border: 1px dashed ${isDarkMode ? '#4b5563' : '#d1d5db'}; /* Use theme colors */
-        background-color: ${isDarkMode ? '#1f2937' : '#f9fafb'}; /* Use theme colors */
-        padding: 1.25rem; /* ~20px */
-        margin: 2em 0;
-        text-align: center;
-        font-size: 0.9em; /* Slightly smaller */
-        color: ${isDarkMode ? '#9ca3af' : '#6b7280'}; /* Use theme colors */
-        border-radius: 0.375rem; /* Add some rounding */
-      }
-
-      .video-placeholder p {
-        margin-bottom: 0.625rem; /* ~10px */
-        line-height: 1.5; /* Adjust line height for placeholder */
-      }
-
-      .video-placeholder a {
-        color: ${isDarkMode ? '#93c5fd' : '#3b82f6'}; /* Match link color */
-        font-weight: 500;
-      }
-
-      /* Style for image credits (e.g., Craig Blake) */
-      .article-content figure div[data-component="image-block"] p span {
-        position: absolute;
-        bottom: 0.5rem; /* Adjust as needed */
-        right: 0.5rem; /* Adjust as needed */
-        background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black */
-        color: white;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem; /* Smaller font size */
-        border-radius: 0.25rem;
-        z-index: 10; /* Ensure it's above the image */
-        max-width: 50%; /* Prevent very long credits from taking too much space */
-        text-align: right;
-        line-height: 1.2;
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
       }
     `}</style>
   );

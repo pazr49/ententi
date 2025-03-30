@@ -44,7 +44,7 @@ export const bbcProcessor: ArticleProcessor = {
         console.log('[BBC Processor] Found #readability-page-1 container. Processing inside it.');
 
         // First remove common unwanted elements *within* the main container
-        removeCommonUnwantedElements(mainContainer);
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
     
         // --- Simplified BBC-specific cleanups within the main container --- 
         mainContainer.querySelectorAll('.share, [data-component="share-tools"], .social-embed, [data-component="links-block"], [data-component="tag-list"], [data-component="see-alsos"]').forEach(el => el.remove());
@@ -134,7 +134,7 @@ export const bbcProcessor: ArticleProcessor = {
         });
     
         // Apply common styling *to the main container*
-        applyCommonStyling(mainContainer);
+        applyCommonStyling(mainContainer as HTMLDivElement);
 
         // --- Return innerHTML of the main container --- 
         result.processedContent = mainContainer.innerHTML;

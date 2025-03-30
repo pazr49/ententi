@@ -36,7 +36,7 @@ export const nytProcessor: ArticleProcessor = {
         console.log('[NYT Processor] Found #readability-page-1 container. Processing inside it.');
 
         // First remove common unwanted elements *within* the main container
-        removeCommonUnwantedElements(mainContainer);
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
 
         // NYT-specific cleanups *within* the main container
         mainContainer.querySelectorAll(
@@ -102,7 +102,7 @@ export const nytProcessor: ArticleProcessor = {
         });
 
         // Apply common styling *to the main container*
-        applyCommonStyling(mainContainer);
+        applyCommonStyling(mainContainer as HTMLDivElement);
 
         // Final cleanup for duplicate images within main container
         const finalImages = mainContainer.querySelectorAll('figure img'); // Re-query images within the container

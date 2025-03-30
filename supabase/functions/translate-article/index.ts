@@ -92,41 +92,14 @@ interface ProcessedNode {
   html: string;
 }
 
-// --- Helper function to check for direct figure child ---
-const hasDirectFigureChild = (element: Element): boolean => {
-  // Check if element itself is null or undefined before accessing childNodes
-  if (!element) return false; 
-  // Check if childNodes exists and is iterable
-  if (!element.childNodes || typeof element.childNodes[Symbol.iterator] !== 'function') {
-      console.warn("[PARSE_HELPER] Element does not have iterable childNodes:", element.outerHTML?.substring(0,50));
-      return false; 
-  }
-  
-  try {
-      for (const child of element.childNodes) {
-          // Ensure child and nodeType are accessible
-          if (child && child.nodeType === Node.ELEMENT_NODE) {
-              const childElement = child as Element;
-              // Ensure tagName is accessible
-              if (childElement.tagName && childElement.tagName.toLowerCase() === 'figure') {
-                  return true;
-              }
-          }
-      }
-  } catch(e) {
-      console.error("[PARSE_HELPER] Error iterating childNodes for:", element.outerHTML?.substring(0,50), e);
-  }
-  return false;
-};
-
 // --- NEW: Helper function to check if an element should be preserved ---
 const isPreservable = (element: Element): boolean => {
   const tagName = element.tagName.toLowerCase();
   return (
     // 1. Check for NYT image wrapper divs
     (tagName === 'div' && element.getAttribute('data-testid') === 'imageblock-wrapper') ||
-    // 2. Check for divs containing figures (New Statesman style)
-    (tagName === 'div' && hasDirectFigureChild(element)) ||
+    // 2. Check for divs containing figures (New Statesman style) - REMOVED FOR BEING TOO BROAD
+    // (tagName === 'div' && hasDirectFigureChild(element)) || 
     // 3. Check for standard figure elements
     tagName === 'figure' ||
     // 4. Check for video placeholders

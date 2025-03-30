@@ -54,7 +54,7 @@ export const paulGrahamProcessor: ArticleProcessor = {
         console.log('[PaulGraham Processor] Found #readability-page-1 container. Processing inside it.');
 
         // First remove common unwanted elements *within* the main container
-        removeCommonUnwantedElements(mainContainer);
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
 
         // --- Hero Image Logic within main container --- 
         let hasHeroImage = false;
@@ -79,7 +79,7 @@ export const paulGrahamProcessor: ArticleProcessor = {
         headers.forEach(header => { (header as HTMLElement).style.margin = '1.5em 0 0.8em 0'; (header as HTMLElement).style.fontWeight = 'bold'; });
 
         // Apply common styling *to the main container*
-        applyCommonStyling(mainContainer);
+        applyCommonStyling(mainContainer as HTMLDivElement);
 
         // --- Return innerHTML of the main container --- 
         result.processedContent = mainContainer.innerHTML;

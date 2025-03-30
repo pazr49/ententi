@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useRef } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -9,7 +9,6 @@ import {
   ArticleReader,
   ArticleStatusMessage 
 } from '@/components/articles';
-import { TranslationSettings } from '@/components/ui';
 
 // Import our custom hooks
 import { useArticleFetching } from '@/hooks/useArticleFetching';
@@ -23,15 +22,10 @@ function ArticleContent() {
   
   // Use our custom hooks
   const { article, isLoading, error, fetchArticle } = useArticleFetching();
-  const { translatedArticle, isTranslating, translationError, translate, cancelTranslation } = useArticleTranslation();
+  const { translatedArticle, isTranslating, translationError } = useArticleTranslation();
   const { isSaved } = useArticleSaving(url);
   
   const [isClient, setIsClient] = useState(false);
-  const [translationRegion, setTranslationRegion] = useState<string | undefined>();
-  const [translationLanguage, setTranslationLanguage] = useState<string | undefined>();
-  
-  // Store pending translation info to apply when translation completes
-  const pendingTranslationRef = useRef<{language?: string, region?: string}>({});
 
   // Set isClient once component mounts
   useEffect(() => {
@@ -61,12 +55,8 @@ function ArticleContent() {
   useEffect(() => {
     if (translatedArticle && !isTranslating) {
       // Apply the pending translation info when translation finishes successfully
-      setTranslationLanguage(pendingTranslationRef.current.language);
-      setTranslationRegion(pendingTranslationRef.current.region);
     } else if (!translatedArticle) {
       // Clear translation info when there's no translated article
-      setTranslationLanguage(undefined);
-      setTranslationRegion(undefined);
     }
   }, [translatedArticle, isTranslating]);
 

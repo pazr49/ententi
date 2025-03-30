@@ -70,7 +70,7 @@ export const defaultProcessor: ArticleProcessor = {
         console.log('[Default Processor] Found #readability-page-1 container. Processing inside it.');
 
         // First remove common unwanted elements *within* the main container
-        removeCommonUnwantedElements(mainContainer);
+        removeCommonUnwantedElements(mainContainer as HTMLDivElement);
 
         // --- Hero Image Logic within main container --- 
         let hasHeroImage = false;
@@ -89,7 +89,7 @@ export const defaultProcessor: ArticleProcessor = {
         }
 
         // Apply common styling *to the main container*
-        applyCommonStyling(mainContainer);
+        applyCommonStyling(mainContainer as HTMLDivElement);
 
         // --- Return innerHTML of the main container --- 
         result.processedContent = mainContainer.innerHTML;
