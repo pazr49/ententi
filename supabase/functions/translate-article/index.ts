@@ -45,14 +45,14 @@ const readingAgeMap: Record<string, string> = {
 const languageMap: Record<string, string> = {
   "es": "Spanish",
   "fr": "French",
-  "de": "German",
-  "it": "Italian",
   "pt": "Portuguese",
-  "zh": "Chinese",
-  "ja": "Japanese",
-  "ko": "Korean",
   "ru": "Russian",
-  "ar": "Arabic"
+  "de": "German",
+  "tr": "Turkish",
+  "it": "Italian",
+  "pl": "Polish",
+  "nl": "Dutch",
+  "ro": "Romanian"
 };
 
 // Map of language regions to their dialect descriptions

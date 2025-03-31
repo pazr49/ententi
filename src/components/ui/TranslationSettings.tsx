@@ -52,6 +52,15 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
       ]
     },
     { 
+      code: 'pt', 
+      name: 'Portuguese',
+      regions: [
+        { code: 'pt', name: 'Portugal' },
+        { code: 'br', name: 'Brazil' }
+      ]
+    },
+    { code: 'ru', name: 'Russian' },
+    { 
       code: 'de', 
       name: 'German',
       regions: [
@@ -60,6 +69,7 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
         { code: 'ch', name: 'Switzerland' }
       ]
     },
+    { code: 'tr', name: 'Turkish' },
     { 
       code: 'it', 
       name: 'Italian',
@@ -68,14 +78,9 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
         { code: 'ch', name: 'Switzerland' }
       ]
     },
-    { 
-      code: 'pt', 
-      name: 'Portuguese',
-      regions: [
-        { code: 'pt', name: 'Portugal' },
-        { code: 'br', name: 'Brazil' }
-      ]
-    }
+    { code: 'pl', name: 'Polish' },
+    { code: 'nl', name: 'Dutch' },
+    { code: 'ro', name: 'Romanian' }
   ];
 
   // Simplified reading levels (ages hidden from UI but used in the backend)
@@ -200,7 +205,7 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
       
       <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-md">
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          Translate this article to your preferred language and adapt it to your reading level using AI.
+          🧪 <strong>Alpha Test Notice:</strong> This translation uses AI and might contain errors or sound unnatural as we&apos;re still testing. Your feedback on any inaccuracies is greatly appreciated!
         </p>
         
         <form onSubmit={handleSubmit}>
