@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getUserPreferences, saveUserPreferences as savePrefs } from '@/utils/userPreferences';
+import { track } from '@vercel/analytics';
 
 interface TranslationSettingsProps {
   onTranslate: (language: string, readingAge: string, region?: string) => void;
@@ -157,6 +158,13 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
       // Save user preferences before calling onTranslate
       await saveUserPreferences();
       
+      // Track the custom event
+      track('Translate Article', {
+        language: targetLanguage,
+        readingLevel: readingAge,
+        ...(region && { region: region }) // Conditionally add region if it exists
+      });
+
       // Call the passed-in onTranslate function with the selected settings
       // The parent component (ArticleReader) will handle the API call
       onTranslate(targetLanguage, readingAge, region);
