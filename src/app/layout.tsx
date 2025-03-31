@@ -3,6 +3,7 @@ import "./globals.css";
 import Providers from "@/components/layout/Providers";
 import { Geist, Geist_Mono } from "next/font/google";
 import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
+import { Analytics } from '@vercel/analytics/react';
 
 // Import the new handler component
 import FeedbackHandler from '@/components/layout/FeedbackHandler';
@@ -46,6 +47,7 @@ export default function RootLayout({
           {/* Render the client-side feedback handler */}
           <FeedbackHandler />
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
