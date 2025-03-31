@@ -4,6 +4,9 @@ import Providers from "@/components/layout/Providers";
 import { Geist, Geist_Mono } from "next/font/google";
 import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
 
+// Import the new handler component
+import FeedbackHandler from '@/components/layout/FeedbackHandler';
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -28,6 +31,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // State management is moved to FeedbackHandler
+
   return (
     <html lang="en">
       <body
@@ -38,6 +43,8 @@ export default function RootLayout({
             {children}
           </main>
           <ServiceWorkerRegistrar />
+          {/* Render the client-side feedback handler */}
+          <FeedbackHandler />
         </Providers>
       </body>
     </html>
