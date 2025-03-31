@@ -138,10 +138,10 @@ export default function Navbar() {
       {isMenuOpen && (
         <div className="navbar-mobile-menu">
           <div className="navbar-mobile-menu-container">
-            <Link href="/" className="navbar-mobile-link">
+            <Link href="/" className="navbar-mobile-link" onClick={() => setIsMenuOpen(false)}>
               Home
             </Link>
-            <Link href="/saved" className="navbar-mobile-link">
+            <Link href="/saved" className="navbar-mobile-link" onClick={() => setIsMenuOpen(false)}>
               Saved Articles
             </Link>
             
@@ -153,11 +153,14 @@ export default function Navbar() {
               </div>
             ) : user ? (
               <>
-                <Link href="/profile" className="navbar-mobile-link">
+                <Link href="/profile" className="navbar-mobile-link" onClick={() => setIsMenuOpen(false)}>
                   Profile
                 </Link>
                 <button
-                  onClick={handleSignOut}
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    handleSignOut();
+                  }}
                   className="navbar-mobile-link w-full text-left"
                 >
                   Sign Out
@@ -165,10 +168,10 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/auth/login" className="navbar-mobile-link">
+                <Link href="/auth/login" className="navbar-mobile-link" onClick={() => setIsMenuOpen(false)}>
                   Log In
                 </Link>
-                <Link href="/auth/signup" className="navbar-mobile-link mt-1">
+                <Link href="/auth/signup" className="navbar-mobile-link mt-1" onClick={() => setIsMenuOpen(false)}>
                   Sign Up
                 </Link>
               </>
