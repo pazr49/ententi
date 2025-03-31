@@ -40,6 +40,11 @@ const nextConfig = {
       },
     ],
   },
+  // Exclude Supabase Edge Functions from build
+  webpack: (config) => {
+    config.externals = [...(config.externals || []), 'supabase/functions']; 
+    return config;
+  },
 };
 
 module.exports = nextConfig; 
