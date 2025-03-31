@@ -4,9 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Log environment info but not credentials
-console.log('Supabase URL:', supabaseUrl);
-console.log('Supabase Anon Key exists:', !!supabaseAnonKey);
+// Log whether the environment variables are set (optional, remove for production)
+// console.log('Supabase URL exists:', !!supabaseUrl);
+// console.log('Supabase Anon Key exists:', !!supabaseAnonKey);
 
 // Check for missing credentials
 if (!supabaseUrl || !supabaseAnonKey) {

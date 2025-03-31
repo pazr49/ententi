@@ -287,7 +287,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
             if (isPreservable(childElement)) {
               const key = `preserved-${preservedNodeIndex}`;
-              console.log(`[FRONTEND_PREPARSE_RECURSE] Storing PRESERVED node <${childTagName}> with key '${key}': ${shortHTML}`);
+              // console.log(`[FRONTEND_PREPARSE_RECURSE] Storing PRESERVED node <${childTagName}> with key '${key}': ${shortHTML}`);
               map.set(key, childElement.outerHTML);
               preservedNodeIndex++;
             } else if (['div', 'article', 'section', 'main', 'header', 'footer', 'aside'].includes(childTagName)) {
@@ -478,16 +478,17 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             }
 
             // --- UPDATED: Check for preserved node reference using local map ---
-            if (typeof chunk.preservedRef === 'string') {
+            if (chunk.preservedRef) {
+              // Find the preserved HTML from the map
               const refKey = chunk.preservedRef;
-              // Use the local map directly
-              const preservedHtml = localPreservedMap.get(refKey); 
+              const preservedHtml = localPreservedMap.get(refKey);
+
               if (preservedHtml) {
-                console.log(`[FRONTEND_APPEND_PRESERVED] Ref: '${refKey}', Appending HTML (first 200 chars):`, preservedHtml.substring(0, 200));
-                console.log(`[FRONTEND] Appending PRESERVED chunk ${receivedChunkCount} using ref '${refKey}'. HTML: ${preservedHtml.substring(0,100)}...`);
+                // console.log(`[FRONTEND_APPEND_PRESERVED] Ref: '${refKey}', Appending HTML (first 200 chars):`, preservedHtml.substring(0, 200));
+                // console.log(`[FRONTEND] Appending PRESERVED chunk ${receivedChunkCount} using ref '${refKey}'. HTML: ${preservedHtml.substring(0,100)}...`);
                 setFinalStreamedContent(prev => prev + preservedHtml);
               } else {
-                console.error(`[FRONTEND] Error: Received preservedRef '${refKey}' but no matching HTML found in local map!`);
+                // console.error(`[FRONTEND] Error: Received preservedRef '${refKey}' but no matching HTML found in local map!`);
                 setFinalStreamedContent(prev => prev + `<!-- ERROR: Preserved content for ${refKey} not found -->`);
               }
             } else if (typeof chunk.contentChunk === 'string') {

@@ -226,9 +226,13 @@ body {
 }
 
 .article-card {
-  @apply bg-white dark:bg-gray-800 rounded-xl overflow-hidden transition-all duration-300
-         border border-gray-100 dark:border-gray-700 hover:shadow-lg hover:border-indigo-100 
-         dark:hover:border-indigo-900 cursor-pointer h-full flex flex-col;
+  @apply bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-sm 
+         border border-gray-100 dark:border-gray-700 cursor-default 
+         transition-all duration-200;
+}
+
+.article-card:hover {
+  @apply shadow-md border-gray-200 dark:border-gray-600;
 }
 
 .article-card:hover .article-card-title {
@@ -333,8 +337,33 @@ body {
 }
 
 .article-card-signup-button {
-  @apply px-3 py-1 bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-white 
-         rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 text-xs;
+  @apply px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors;
+}
+
+/* New styles for action buttons */
+.article-card-actions {
+  @apply mt-3 flex gap-3 items-center;
+}
+
+.article-card-btn {
+  @apply flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 border;
+}
+
+.article-card-btn-icon {
+  @apply w-4 h-4;
+}
+
+.article-card-original-btn {
+  @apply border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800;
+}
+
+.article-card-translate-btn {
+  @apply bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 hover:border-indigo-700 shadow-sm hover:shadow transition-all dark:bg-indigo-700 dark:hover:bg-indigo-800 dark:border-indigo-700 dark:hover:border-indigo-800;
+}
+
+/* Make the icon in the translate button white */
+.article-card-translate-btn .article-card-btn-icon {
+  @apply text-white;
 }
 
 /* Loading Animation */
