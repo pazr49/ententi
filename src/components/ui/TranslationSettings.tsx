@@ -205,7 +205,7 @@ export default function TranslationSettings({ onTranslate, isTranslating, onCanc
       
       <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-md">
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          🧪 <strong>Alpha Test Notice:</strong> This translation uses AI and might contain errors or sound unnatural as we're still testing. Your feedback on any inaccuracies is greatly appreciated!
+          🧪 <strong>Alpha Test Notice:</strong> This translation uses AI and might contain errors or sound unnatural as we&apos;re still testing. Your feedback on any inaccuracies is greatly appreciated!
         </p>
         
         <form onSubmit={handleSubmit}>
