@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "@/components/layout/Providers";
 import { Geist, Geist_Mono } from "next/font/google";
+import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ententi - Learn Languages Through Reading",
   description: "Learn any language by reading content you love, perfectly adapted to your reading level with instant translations",
+  manifest: "/manifest.json",
   icons: {
     icon: '/globe.svg',
   },
@@ -35,6 +37,7 @@ export default function RootLayout({
           <main className="min-h-screen pt-16">
             {children}
           </main>
+          <ServiceWorkerRegistrar />
         </Providers>
       </body>
     </html>
