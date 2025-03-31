@@ -1,34 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signUp } from '@/utils/supabaseAuth';
+import { z } from 'zod';
+
+// Define the schema for the request body
+const SignupSchema = z.object({
+  email: z.string().email({ message: "Invalid email format." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters long." }),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const body = await request.json();
 
-    // Validate input
-    if (!email || !password) {
+    // Validate the request body
+    const validationResult = SignupSchema.safeParse(body);
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Invalid input', details: validationResult.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-
-    // Validate password strength
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters long' },
-        { status: 400 }
-      );
-    }
+    const { email, password } = validationResult.data; // Use validated data
 
     // Sign up the user
     const data = await signUp(email, password);

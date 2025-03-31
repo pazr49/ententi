@@ -321,22 +321,55 @@ async function processAndStreamArticle(
 
 // Serve Function (largely the same, calls the updated processAndStreamArticle)
 serve(async (req: Request) => {
-  // Handle preflight requests (remains the same)
+  // --- CORS Configuration --- 
+  // Read allowed origins from environment variable, split by comma, trim whitespace
+  const allowedOriginsString = Deno.env.get("ALLOWED_ORIGINS") || ""; // Default to empty string if not set
+  const allowedOrigins = allowedOriginsString.split(',').map(origin => origin.trim()).filter(origin => origin);
+
+  // Get the origin of the request
+  const requestOrigin = req.headers.get("Origin");
+
+  // Determine if the origin is allowed and the specific origin header to use in response
+  let accessControlAllowOrigin = "";
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    accessControlAllowOrigin = requestOrigin; // Reflect the allowed origin
+  }
+
+  // If origin is not allowed, block immediately
+  if (!accessControlAllowOrigin) {
+    // Don't log the origin here if it might be sensitive or null
+    console.warn(`Blocking request from disallowed origin.`); 
+    return new Response("Origin not allowed", { status: 403 });
+  }
+
+  // --- Headers for actual response (Streaming) ---
+  const responseHeaders = new Headers({
+    "Content-Type": "application/x-ndjson",
+    "Transfer-Encoding": "chunked",
+    "Access-Control-Allow-Origin": accessControlAllowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  });
+
+  // --- Headers for Preflight (OPTIONS) and Error Responses ---
+  const commonHeaders = {
+    "Access-Control-Allow-Origin": accessControlAllowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+
+  // Handle preflight requests (Origin check is already done)
   if (req.method === "OPTIONS") {
     return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      },
+      headers: commonHeaders,
       status: 204
     });
   }
 
-  // Only allow POST requests (remains the same)
+  // Only allow POST requests
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { ...commonHeaders, "Content-Type": "application/json" },
       status: 405
     });
   }
@@ -351,15 +384,6 @@ serve(async (req: Request) => {
     cancel() {
       console.log("Stream cancelled by client.");
     }
-  });
-
-  // --- Headers (remains the same) ---
-  const headers = new Headers({
-    "Content-Type": "application/x-ndjson",
-    "Transfer-Encoding": "chunked",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
   });
 
   // --- Start Processing Asynchronously (IIAFE) ---
@@ -452,8 +476,8 @@ serve(async (req: Request) => {
     }
   })(); // End of IIAFE
 
-  // Return the stream response immediately
-  return new Response(stream, { headers, status: 200 });
+  // Return the stream response immediately with the correct headers
+  return new Response(stream, { headers: responseHeaders, status: 200 });
 });
 
 /* Old invocation instructions are still valid for testing non-streaming parts if needed,

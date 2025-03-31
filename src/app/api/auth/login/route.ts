@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signIn } from '@/utils/supabaseAuth';
+import { z } from 'zod';
+
+// Define the schema for the request body
+const LoginSchema = z.object({
+  email: z.string().email({ message: "Invalid email format." }),
+  password: z.string().min(1, { message: "Password cannot be empty." }),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const body = await request.json();
 
-    // Validate input
-    if (!email || !password) {
+    // Validate the request body
+    const validationResult = LoginSchema.safeParse(body);
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Invalid input', details: validationResult.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
+
+    const { email, password } = validationResult.data; // Use validated data
 
     // Sign in the user
     const data = await signIn(email, password);

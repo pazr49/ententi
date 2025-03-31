@@ -18,21 +18,53 @@ interface TranslationResponse {
 }
 
 serve(async (req: Request) => {
-  // Set CORS headers for all responses
-  const headers = new Headers({
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
+  // --- CORS Configuration --- 
+  // Read allowed origins from environment variable, split by comma, trim whitespace
+  const allowedOriginsString = Deno.env.get("ALLOWED_ORIGINS") || ""; // Default to empty string if not set
+  const allowedOrigins = allowedOriginsString.split(',').map(origin => origin.trim()).filter(origin => origin);
+
+  // Get the origin of the request
+  const requestOrigin = req.headers.get("Origin");
+
+  // Determine if the origin is allowed and the specific origin header to use in response
+  let accessControlAllowOrigin = "";
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    accessControlAllowOrigin = requestOrigin; // Reflect the allowed origin
+  }
+
+  // Base headers object (Content-Type might be added later)
+  const baseHeaders = {
+    "Access-Control-Allow-Origin": accessControlAllowOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info, Referer, User-Agent, X-Supabase-Auth"
-  });
+  };
+
+  // If origin is not allowed, block immediately
+  if (!accessControlAllowOrigin) {
+    // Don't log the origin here if it might be sensitive or null
+    console.warn(`Blocking request from disallowed origin.`); 
+    return new Response("Origin not allowed", { status: 403 });
+  }
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers
+      headers: baseHeaders // Origin is already validated and included
     });
   }
+
+  // Only allow POST requests
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      // Add Content-Type for the JSON error response
+      headers: { ...baseHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  // Define headers for successful JSON responses
+  const successJsonHeaders = { ...baseHeaders, "Content-Type": "application/json" };
 
   try {
     // Get Gemini API key from environment variables
@@ -42,7 +74,8 @@ serve(async (req: Request) => {
     if (!GEMINI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "API key not configured" }),
-        { status: 500, headers }
+        // Use JSON headers
+        { status: 500, headers: successJsonHeaders }
       );
     }
 
@@ -53,7 +86,8 @@ serve(async (req: Request) => {
     if (!text) {
       return new Response(
         JSON.stringify({ error: "Text is required" }),
-        { status: 400, headers }
+        // Use JSON headers
+        { status: 400, headers: successJsonHeaders }
       );
     }
 
@@ -107,7 +141,8 @@ Important: Provide an accurate English translation. Do not add any explanation o
     if (!rawText) {
       return new Response(
         JSON.stringify({ error: "Translation returned empty content" }),
-        { status: 500, headers }
+        // Use JSON headers
+        { status: 500, headers: successJsonHeaders }
       );
     }
 
@@ -124,7 +159,8 @@ Important: Provide an accurate English translation. Do not add any explanation o
         
         return new Response(
           JSON.stringify(result),
-          { headers }
+          // Use JSON headers
+          { headers: successJsonHeaders }
         );
       } else {
         // If JSON parsing fails, use the raw text as fallback
@@ -134,7 +170,8 @@ Important: Provide an accurate English translation. Do not add any explanation o
         
         return new Response(
           JSON.stringify(result),
-          { headers }
+          // Use JSON headers
+          { headers: successJsonHeaders }
         );
       }
     } catch (error) {
@@ -146,7 +183,8 @@ Important: Provide an accurate English translation. Do not add any explanation o
       
       return new Response(
         JSON.stringify(result),
-        { headers }
+        // Use JSON headers
+        { headers: successJsonHeaders }
       );
     }
   } catch (error: unknown) {
@@ -156,7 +194,8 @@ Important: Provide an accurate English translation. Do not add any explanation o
     
     return new Response(
       JSON.stringify({ error: "Internal server error", details: errorMessage }),
-      { status: 500, headers }
+      // Use JSON headers
+      { status: 500, headers: successJsonHeaders }
     );
   }
 }); 
