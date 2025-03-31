@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function ShareHandlerPage() {
+// Renamed the core logic component
+function ShareHandlerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -28,5 +29,16 @@ export default function ShareHandlerPage() {
     <div style={{ padding: '20px', textAlign: 'center' }}>
       Processing shared link...
     </div>
+  );
+}
+
+// Default export is now the page wrapping the content in Suspense
+export default function ShareHandlerPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
+    }>
+      <ShareHandlerContent />
+    </Suspense>
   );
 } 
