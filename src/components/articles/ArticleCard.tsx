@@ -18,6 +18,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
   const isArticleSaved = savedArticleGuids.has(article.guid);
   
   const handleTranslateClick = async (e: React.MouseEvent) => {
+    // Ensure the event doesn't propagate and prevent default behavior
     e.stopPropagation();
     e.preventDefault();
     
@@ -25,9 +26,12 @@ export default function ArticleCard({ article }: ArticleCardProps) {
     
     setIsProcessing(true);
     try {
-      // Navigate directly to reader view without requiring login
-      router.push(`/article?url=${encodeURIComponent(article.link)}`);
-
+      // Set session storage flags to prevent redirect on article page
+      sessionStorage.setItem('articleReaderView', 'true');
+      sessionStorage.setItem('currentArticleUrl', article.link);
+      
+      // Use a direct navigation approach with await to ensure it completes
+      await router.push(`/article?url=${encodeURIComponent(article.link)}`);
     } catch (err) { 
       console.error('Error navigating to reader view:', err);
       
@@ -86,7 +90,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
   const source = getDomain(article.link);
   
   return (
-    <div className="article-card">
+    <div className="article-card" onClick={(e) => e.stopPropagation()}>
       {article.imageUrl && (
         <div className="article-card-image-container">
           <Image
@@ -118,7 +122,13 @@ export default function ArticleCard({ article }: ArticleCardProps) {
           </p>
         )}
         <div className="article-card-actions">
-          <a href={article.link} target="_blank" rel="noopener noreferrer" className="article-card-btn article-card-original-btn">
+          <a 
+            href={article.link} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="article-card-btn article-card-original-btn"
+            onClick={(e) => e.stopPropagation()}
+          >
             <svg className="article-card-btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
               <polyline points="15 3 21 3 21 9"></polyline>
@@ -126,11 +136,19 @@ export default function ArticleCard({ article }: ArticleCardProps) {
             </svg>
             <span>Original</span>
           </a>
-          <div className="relative">
+          <div 
+            className="relative" 
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+          >
             <button
               onClick={handleTranslateClick}
               disabled={isProcessing || isLoading}
               className="article-card-btn article-card-translate-btn"
+              aria-label="Translate article"
+              data-testid="translate-article-btn"
             >
               <>
                 <svg className="article-card-btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
