@@ -19,11 +19,35 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://ententi.com'),
   title: "Ententi - Learn Languages Through Reading",
   description: "Learn any language by reading content you love, perfectly adapted to your reading level with instant translations",
   manifest: "/manifest.json",
   icons: {
     icon: '/globe.svg',
+  },
+  openGraph: {
+    title: "Ententi - Learn Languages Through Reading",
+    description: "Learn any language by reading content you love, perfectly adapted to your reading level with instant translations",
+    url: 'https://ententi.com',
+    siteName: 'Ententi',
+    images: [
+      {
+        url: '/og_image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Ententi - Learn Languages Through Reading',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Ententi - Learn Languages Through Reading',
+    description: 'Learn any language by reading content you love, perfectly adapted to your reading level with instant translations',
+    images: ['/og_image.png'],
+    creator: '@ententi',
   },
 };
 
