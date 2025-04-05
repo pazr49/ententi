@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { getLanguageName, getRegionName } from '@/utils/translationUtils';
 
 interface ArticleToolbarProps {
   isDarkMode: boolean;
@@ -13,6 +14,7 @@ interface ArticleToolbarProps {
   };
   onListenClick: () => void;
   isTTSLoading: boolean;
+  isStreaming: boolean;
 }
 
 export default function ArticleToolbar({
@@ -23,6 +25,7 @@ export default function ArticleToolbar({
   translationInfo,
   onListenClick,
   isTTSLoading,
+  isStreaming,
 }: ArticleToolbarProps) {
   
   // Helper function to get the flag emoji based on region
@@ -60,55 +63,7 @@ export default function ArticleToolbar({
     return flagMap[region] || '';
   };
   
-  // Helper function to get language name from code
-  const getLanguageName = (code?: string): string => {
-    if (!code) return '';
-    
-    const languageMap: {[key: string]: string} = {
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'pt': 'Portuguese'
-    };
-    
-    return languageMap[code] || code;
-  };
-  
-  // Helper function to get region name from code
-  const getRegionName = (region?: string): string => {
-    if (!region) return '';
-    
-    const regionMap: {[key: string]: string} = {
-      // Spanish regions
-      'es': 'Spain',
-      'mx': 'Mexico',
-      'co': 'Colombia',
-      'ar': 'Argentina',
-      'pe': 'Peru',
-      'cl': 'Chile',
-      
-      // French regions
-      'fr': 'France',
-      'ca': 'Canada',
-      'be': 'Belgium',
-      'ch': 'Switzerland',
-      
-      // German regions
-      'de': 'Germany',
-      'at': 'Austria',
-      
-      // Italian regions
-      'it': 'Italy',
-      
-      // Portuguese regions
-      'pt': 'Portugal',
-      'br': 'Brazil',
-    };
-    
-    return regionMap[region] || region;
-  };
-  
+  // Use imported functions
   const flagEmoji = translationInfo?.region ? getRegionFlag(translationInfo.region) : '';
   const languageName = getLanguageName(translationInfo?.language);
   const regionName = getRegionName(translationInfo?.region);
@@ -253,13 +208,14 @@ export default function ArticleToolbar({
         
         <button
           onClick={onListenClick}
-          disabled={isTTSLoading}
+          disabled={isTTSLoading || isStreaming}
           className={`p-2 rounded-full transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300 ${
-            isTTSLoading 
-              ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' 
+            (isTTSLoading || isStreaming) 
+              ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50'
               : 'hover:bg-gray-100 dark:hover:bg-gray-800'
           }`}
           aria-label="Listen to article"
+          title={isStreaming ? "Cannot listen while translating" : "Listen to article"}
         >
           {isTTSLoading ? (
             <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
