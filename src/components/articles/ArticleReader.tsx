@@ -11,6 +11,9 @@ import ArticleMeta from './ArticleReader/ArticleMeta';
 // import { extractArticleText } from './ArticleReader/utils';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import TranslationSettings from '@/components/ui/TranslationSettings';
+// --- ADDED: Import helper functions ---
+import { getLanguageName, getRegionName } from '@/utils/translationUtils';
+// --- END: Import helper functions ---
 
 interface StreamChunk {
   metadata?: {
@@ -45,6 +48,9 @@ const isPreservable = (element: Element): boolean => {
     // Add other specific publication selectors here
   );
 };
+
+
+// --- End Helper Functions ---
 
 export default function ArticleReader({ article, isLoading = false, originalUrl, thumbnailUrl }: ArticleReaderProps) {
   // UI state
@@ -83,6 +89,15 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
   const [showOldContent, setShowOldContent] = useState<boolean>(true);
   const [currentTranslationRegion, setCurrentTranslationRegion] = useState<string | undefined>(undefined);
+  const [currentTranslationLevel, setCurrentTranslationLevel] = useState<string | undefined>(undefined);
+  const [ttsAudioMetadata, setTtsAudioMetadata] = useState<{ language: string | 'Original', region?: string, readingLevel?: string, chunkNumber?: number } | null>(null);
+
+  // --- NEW: State for TTS Chunking ---
+  const [currentTTSChunkIndex, setCurrentTTSChunkIndex] = useState<number>(-1);
+  const [ttsLastElementProcessedIndex, setTtsLastElementProcessedIndex] = useState<number>(-1);
+  const [hasNextTTSChunk, setHasNextTTSChunk] = useState<boolean>(false);
+  const [showContinueButton, setShowContinueButton] = useState<boolean>(false);
+  // --- END: State for TTS Chunking ---
 
   // Detect Paul Graham articles
   useEffect(() => {
@@ -105,6 +120,56 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
       }
     }
   }, [article?.publishedTime, publishDate]);
+
+  // --- NEW: Track scroll position to show/hide Continue Listening button ---
+  useEffect(() => {
+    // Only set up scroll tracking if there's a next chunk available
+    if (!hasNextTTSChunk || ttsLastElementProcessedIndex === -1 || !articleContentRef.current) {
+      setShowContinueButton(false);
+      return;
+    }
+
+    // Function to check scroll position
+    const checkScrollPosition = () => {
+      if (!articleContentRef.current) return;
+      
+      // Get all the text elements
+      const allTextElements = Array.from(
+        articleContentRef.current.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6')
+      );
+      
+      // If there are no elements after the last processed index, show the button
+      if (ttsLastElementProcessedIndex >= allTextElements.length - 1) {
+        setShowContinueButton(true);
+        return;
+      }
+      
+      // Get the next element (where part 2 would start)
+      const nextElement = allTextElements[ttsLastElementProcessedIndex + 1] as HTMLElement;
+      if (!nextElement) {
+        setShowContinueButton(true);
+        return;
+      }
+      
+      // Check if the next element is in view or has been scrolled past
+      const elementRect = nextElement.getBoundingClientRect();
+      const isElementVisible = elementRect.top < window.innerHeight * 0.8;
+      
+      setShowContinueButton(isElementVisible);
+    };
+    
+    // Run the check initially
+    checkScrollPosition();
+    
+    // Add scroll event listener
+    window.addEventListener('scroll', checkScrollPosition, { passive: true });
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('scroll', checkScrollPosition);
+    };
+  }, [hasNextTTSChunk, ttsLastElementProcessedIndex, articleContentRef]);
+  // --- END: Track scroll position ---
 
   // --- ADDED: useEffect to process initial article content ---
   useEffect(() => {
@@ -342,6 +407,9 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     setStreamedTitle(''); 
     setStreamedLang(undefined);
     setCurrentTranslationRegion(region);
+    setCurrentTranslationLevel(readingAge);
+    setTtsAudioUrl(null);
+    setTtsAudioMetadata(null);
     
     // --- Pre-parse using the content just processed --- 
     console.log(`[FRONTEND] Content about to be pre-parsed (first 500 chars):`, contentToTranslate.substring(0, 500));
@@ -492,54 +560,141 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     }
   };
 
-  // --- UPDATED: Function to handle TTS generation --- Includes Region ---
-  const handleListenClick = async () => {
-    // Determine the source of text content (remains the same)
-    let sourceText: string | null | undefined = null;
-    let sourceRegion: string | undefined = undefined; // <-- Variable for region
+  // --- UPDATED/RENAMED: Function to handle TTS generation for a specific chunk ---
+  const generateTTSChunk = async (chunkIndex: number) => {
+    console.log(`TTS: generateTTSChunk called for index: ${chunkIndex}`);
     
-    if (finalStreamedContent && articleContentRef.current) {
-      // If translated content exists, use its text and the stored region
-      console.log("TTS: Using text content from translated content ref.");
-      sourceText = articleContentRef.current.textContent;
-      sourceRegion = currentTranslationRegion; // <-- Use stored region
-      console.log(`TTS: Using region: ${sourceRegion || 'none'}`);
-    } else {
-      // Otherwise, use the original article's textContent (no region applicable)
-      console.log("TTS: Using text content from original article prop.");
-      sourceText = article?.textContent;
-      sourceRegion = undefined; // No region for original text
-    }
+    // Reset state for new chunk generation (or initial generation)
+    setIsTTSLoading(true);
+    setTtsAudioUrl(null); 
+    setTtsError(null);
+    setTtsAudioMetadata(null); 
+    setHasNextTTSChunk(false); // Assume no next chunk until proven otherwise
+    // Don't reset currentTTSChunkIndex or ttsLastElementProcessedIndex here, needed for logic below
 
-    if (!sourceText || isTTSLoading) {
-      console.log('TTS: Source text content missing or already loading.');
+    // --- 1. Determine Source Text Container & Region --- 
+    let contentContainer: HTMLElement | null = null;
+    let isOriginalContent = true;
+    let sourceRegion: string | undefined = undefined;
+
+    if (finalStreamedContent && articleContentRef.current) {
+      console.log("TTS: Using text content from translated content ref.");
+      contentContainer = articleContentRef.current;
+      isOriginalContent = false;
+      sourceRegion = currentTranslationRegion;
+    } else if (article?.content && articleContentRef.current) { 
+      // Fallback: Use initialProcessedContent if available via ref, treat as original
+      console.log("TTS: Using text content from initial processed content ref.");
+      contentContainer = articleContentRef.current;
+      isOriginalContent = true;
+      sourceRegion = undefined;
+    } else if (article?.textContent) {
+        // Fallback: If ref isn't ready but we have raw textContent from prop (less ideal for chunking)
+        console.warn("TTS: Content ref not available, falling back to article.textContent (chunking might be less accurate).");
+        // Handling this case requires a different approach as we don't have elements to iterate
+        // For now, let's prevent chunking if we only have raw textContent
+        if (chunkIndex > 0) {
+            console.error("TTS: Cannot generate subsequent chunks without rendered content elements.");
+            setTtsError("Cannot continue listening without rendered article elements.");
+            setIsTTSLoading(false);
+            return;
+        }
+        // If chunkIndex is 0, proceed with the first 100 words of raw text as before
+        // REMOVE const words = article.textContent.split(/\s+/);
+        // REMOVE const textToSpeak = words.slice(0, 100).join(' ');
+        
+        // TODO: Need to separate the API call logic to handle this simple case vs chunked case
+        console.log("TTS: Sending first 100 words of raw text... NOT IMPLEMENTED"); // Placeholder - refactor needed
+        // For simplicity in this refactor, let's temporarily disable TTS if contentContainer is null
+        setTtsError("Article content not ready for audio generation.");
+        setIsTTSLoading(false);
+        return;
+    } else {
+      console.log('TTS: Source text content unavailable.');
+      setIsTTSLoading(false);
       return;
     }
 
-    setIsTTSLoading(true);
-    setTtsAudioUrl(null); // Clear previous audio
-    setTtsError(null);
+    // --- 2. Select Text Segment for the Chunk --- 
+    const allTextElements = Array.from(contentContainer.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6'));
+    const textParts: string[] = [];
+    let currentWordCount = 0;
+    const targetWordCount = 300; 
+    const maxWordCount = 500;   
+    const startElementIndex = chunkIndex === 0 ? 0 : ttsLastElementProcessedIndex + 1; // Use const
+    let endElementIndex = -1; 
+    let reachedEndOfArticle = false;
 
-    try {
-      // Get the first 100 words (approximate) from the chosen source
-      const words = sourceText.split(/\s+/);
-      const textToSpeak = words.slice(0, 100).join(' ');
-      console.log(`TTS: Sending text (first 100 words): "${textToSpeak.substring(0, 70)}..."`);
+    console.log(`TTS: Starting element selection from index ${startElementIndex} (total elements: ${allTextElements.length})`);
 
-      // --- Using fetch with Anon Key --- (remains the same)
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!anonKey) {
-        console.error('TTS: Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable.');
-        throw new Error('Client configuration error.');
+    for (let i = startElementIndex; i < allTextElements.length; i++) {
+      const element = allTextElements[i] as HTMLElement;
+
+      // Exclude if the element itself or an ancestor is figcaption
+      if (!element.closest('figcaption')) { 
+        const text = element.textContent?.trim();
+        if (text) {
+          const wordsInElement = text.split(/\s+/).length;
+          
+          // Check if adding this element exceeds max count (unless it's the first element)
+          if (currentWordCount > 0 && (currentWordCount + wordsInElement) > maxWordCount) {
+              console.log(`TTS: Stopping chunk before element ${i} to avoid exceeding max words (${currentWordCount} + ${wordsInElement} > ${maxWordCount})`);
+              break; // Stop before adding this element
+          }
+          
+          textParts.push(text);
+          currentWordCount += wordsInElement;
+          endElementIndex = i; // Mark this as the last processed element for *this chunk*
+
+          // Check if we've met the minimum word count
+          if (currentWordCount >= targetWordCount) {
+            console.log(`TTS: Reached target word count (${currentWordCount}) at element index ${i}.`);
+            break; // Stop after adding this element
+          }
+        }
       }
+      // If loop finishes naturally, endElementIndex will be the last valid index processed
+    }
+    
+    // Check if we actually processed any elements in this chunk
+    if (endElementIndex === -1 && startElementIndex < allTextElements.length) {
+      console.warn(`TTS: No suitable text found starting from index ${startElementIndex}. Potential issue with selectors or content structure.`);
+        // If we started beyond the last element, it means previous chunk was the end
+        setHasNextTTSChunk(false); 
+        setIsTTSLoading(false);
+        return; // Nothing to process for this chunk index
+    } else if (endElementIndex === -1 && startElementIndex >= allTextElements.length) {
+        // This case means the previous chunk ended exactly at the last element.
+        console.log("TTS: Start index is beyond the last element index. No more chunks.");
+        setHasNextTTSChunk(false); 
+        setIsTTSLoading(false);
+        return; // Nothing to process
+    }
+
+    reachedEndOfArticle = (endElementIndex === allTextElements.length - 1);
+    const sourceText = textParts.join(' \n\n '); 
+
+    if (!sourceText) { // Check sourceText directly
+        console.log("TTS: Extracted text for chunk is empty. Stopping.");
+        setIsTTSLoading(false);
+        setHasNextTTSChunk(false); 
+        return;
+    }
+    
+    console.log(`TTS: Chunk ${chunkIndex + 1} text selected (approx ${currentWordCount} words). Ends at element index ${endElementIndex}. Reached end: ${reachedEndOfArticle}.`);
+    // Use sourceText in the log and payload
+    console.log(`TTS: Sending text for chunk ${chunkIndex + 1}: \"${sourceText.substring(0, 70)}...\"`);
+
+    // --- 3. API Call --- 
+    try {
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!anonKey) throw new Error('Client configuration error: Missing anon key.');
       const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-tts`;
 
-      // --- Construct payload WITH region --- 
-      const payload: { text: string; region?: string } = { text: textToSpeak };
-      if (sourceRegion) {
-        payload.region = sourceRegion;
-      }
-      // --- End construct payload ---
+      // Use sourceText directly in the payload
+      const payload: { text: string; region?: string } = { text: sourceText }; 
+      if (sourceRegion) payload.region = sourceRegion;
+      console.log("TTS Payload being sent:", payload);
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -548,16 +703,16 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           'apikey': anonKey, 
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload), // <-- Send payload with optional region
+        body: JSON.stringify(payload), 
       });
 
       if (!response.ok) {
-        console.error(`TTS: Fetch error - Status: ${response.status}`);
+        // ... (error parsing remains the same) ...
         let errorBody = 'Failed to generate speech.';
         try {
           const errorJson = await response.json(); 
           errorBody = errorJson.error?.details || errorJson.error || errorJson.message || `HTTP error ${response.status}`;
-        } catch (parseErr) {
+        } catch { 
           errorBody = await response.text().catch(() => `HTTP error ${response.status} - Failed to read error body`);
           console.warn("TTS: Failed to parse error response as JSON, using text body:", errorBody);
         }
@@ -566,22 +721,32 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
 
       const audioBlob = await response.blob();
       console.log(`TTS: Received response as Blob (Size: ${audioBlob.size}, Type: ${audioBlob.type})`);
-
-      if (audioBlob.size === 0) {
-          throw new Error("Received empty audio blob.");
-      }
-      if (!audioBlob.type.startsWith('audio/')) {
-          console.warn(`TTS: Received Blob with unexpected type: ${audioBlob.type}`);
-      }
-
-      // Create a URL for the audio blob
+      if (audioBlob.size === 0) throw new Error("Received empty audio blob.");
+      if (!audioBlob.type.startsWith('audio/')) console.warn(`TTS: Received Blob with unexpected type: ${audioBlob.type}`);
+      
+      // --- 4. Update State on Success --- 
       const audioUrl = URL.createObjectURL(audioBlob);
       setTtsAudioUrl(audioUrl);
-      console.log('TTS: Audio URL created successfully.');
+      setCurrentTTSChunkIndex(chunkIndex); // Update current chunk index
+      setTtsLastElementProcessedIndex(endElementIndex); // Store where this chunk ended
+      setHasNextTTSChunk(!reachedEndOfArticle); // Set if there are more chunks
+      
+      // Set metadata
+      const metadataBase = { region: sourceRegion, readingLevel: currentTranslationLevel, chunkNumber: chunkIndex + 1 };
+      setTtsAudioMetadata(isOriginalContent ? { language: 'Original', chunkNumber: chunkIndex + 1 } : { language: streamedLang || 'Translated', ...metadataBase });
+      
+      console.log(`TTS: Audio URL created for chunk ${chunkIndex + 1}. Last element index: ${endElementIndex}. Has next: ${!reachedEndOfArticle}`);
 
-    } catch (err: any) {
-      console.error("Error generating TTS:", err);
-      setTtsError(err.message || 'An unknown error occurred during TTS generation.');
+    } catch (err) { 
+      console.error(`Error generating TTS for chunk ${chunkIndex}:`, err);
+      const message = (err instanceof Error) ? err.message : 'An unknown error occurred during TTS generation.';
+      setTtsError(message);
+      // Reset chunking state on error
+      setTtsAudioUrl(null);
+      setTtsAudioMetadata(null);
+      setCurrentTTSChunkIndex(-1);
+      setTtsLastElementProcessedIndex(-1);
+      setHasNextTTSChunk(false);
     } finally {
       setIsTTSLoading(false);
     }
@@ -647,8 +812,9 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
           toggleFontSize={toggleFontSize}
           originalUrl={originalUrl}
           translationInfo={{ language: streamedLang }}
-          onListenClick={handleListenClick}
+          onListenClick={() => generateTTSChunk(0)}
           isTTSLoading={isTTSLoading}
+          isStreaming={isStreaming}
         />
 
         <div className="p-6 md:p-8">
@@ -667,10 +833,70 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             </div>
           )}
           {ttsAudioUrl && (
-            <div className="my-4">
-              <audio controls src={ttsAudioUrl} className="w-full">
-                Your browser does not support the audio element.
-              </audio>
+            <div className="my-6 rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-r from-white to-indigo-50/50 dark:from-gray-800 dark:to-indigo-950/20 shadow-md overflow-hidden sticky top-20 z-10 backdrop-blur-lg bg-opacity-95 dark:bg-opacity-95 transition-all duration-300 transform translate-y-0">
+              <div className="p-4 md:p-5">
+                {ttsAudioMetadata && (
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                      <svg className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 01-.707-7.072m-2.828 9.9a9 9 0 010-12.728"/>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
+                      </svg>
+                      <div>
+                        <span className="font-medium">
+                          {ttsAudioMetadata.language === 'Original' 
+                            ? 'Original Text' 
+                            : `${getLanguageName(ttsAudioMetadata.language)}`}
+                        </span>
+                        {ttsAudioMetadata.region && (
+                          <span className="ml-1">({getRegionName(ttsAudioMetadata.region)})</span>
+                        )}
+                        {ttsAudioMetadata.readingLevel && (
+                          <span className="ml-2 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-full text-xs">
+                            Level: {ttsAudioMetadata.readingLevel.charAt(0).toUpperCase() + ttsAudioMetadata.readingLevel.slice(1)}
+                          </span>
+                        )}
+                        {ttsAudioMetadata.chunkNumber && (
+                          <span className="ml-2 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-xs">
+                            Part {ttsAudioMetadata.chunkNumber}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Repositioned Continue Listening Button */}
+                    {showContinueButton && !isTTSLoading && (
+                      <button 
+                        onClick={() => generateTTSChunk(currentTTSChunkIndex + 1)}
+                        className="ml-2 px-2 py-1 text-xs bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-all duration-300 focus:ring-1 focus:ring-indigo-300 dark:focus:ring-indigo-700 focus:outline-none flex items-center whitespace-nowrap animate-fade-in"
+                      >
+                        <svg className="w-3 h-3 mr-1 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Next Part
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                <div className="relative group">
+                  <audio controls src={ttsAudioUrl} className="w-full h-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    Your browser does not support the audio element.
+                  </audio>
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300 rounded-lg"></div>
+                </div>
+                
+                {/* Progress indicator - Shows when loading next chunk */}
+                {isTTSLoading && currentTTSChunkIndex >= 0 && (
+                  <div className="mt-3 flex items-center">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mr-2">
+                      <div className="bg-indigo-600 h-1.5 rounded-full animate-pulse"></div>
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Loading next part...</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
@@ -885,6 +1111,22 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
       @keyframes fadeOut {
         from { opacity: 1; }
         to { opacity: 0; }
+      }
+
+      /* Animation for Continue Listening button */
+      @keyframes fadeInButton {
+        from { 
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .animate-fade-in {
+        animation: fadeInButton 0.6s ease-out forwards;
       }
     `}</style>
   );
