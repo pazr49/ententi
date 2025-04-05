@@ -5,11 +5,10 @@ import { ReadableArticle } from '@/utils/readability';
 import { processArticle } from '@/utils/articleProcessors';
 import { WordPopup } from '@/components/articles';
 import { useEnhancedContent } from '@/hooks/useEnhancedContent';
-import { useTTS } from '@/hooks/useTTS';
 import ArticleToolbar from './ArticleReader/ArticleToolbar';
 import ArticleMeta from './ArticleReader/ArticleMeta';
-import TTSPlayer from './ArticleReader/TTSPlayer';
-import { extractArticleText } from './ArticleReader/utils';
+// import TTSPlayer from './ArticleReader/TTSPlayer';
+// import { extractArticleText } from './ArticleReader/utils';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import TranslationSettings from '@/components/ui/TranslationSettings';
 
@@ -62,19 +61,18 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [currentSentence, setCurrentSentence] = useState<string>('');
   
+  // --- NEW: TTS State ---
+  const [isTTSLoading, setIsTTSLoading] = useState<boolean>(false);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  // --- END: TTS State ---
+  
   // Refs
   const articleContentRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Supabase context
   const supabase = useSupabaseClient();
-
-  // TTS hook
-  const tts = useTTS({ 
-    text: extractArticleText(article?.content || ''),
-  });
-
-  const [showTTSPlayer, setShowTTSPlayer] = useState<boolean>(false);
 
   // Streaming/Translation state
   const [streamedTitle, setStreamedTitle] = useState<string>('');
@@ -84,6 +82,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
   const [showOldContent, setShowOldContent] = useState<boolean>(true);
+  const [currentTranslationRegion, setCurrentTranslationRegion] = useState<string | undefined>(undefined);
 
   // Detect Paul Graham articles
   useEffect(() => {
@@ -232,32 +231,6 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     setIsDarkMode(!isDarkMode);
   };
 
-  const toggleTTS = () => {
-    if (tts.isPlaying) {
-      tts.pause();
-    } else {
-      tts.play();
-    }
-  };
-
-  // TTS player visibility
-  useEffect(() => {
-    // Keep TTS functionality but disable automatic display
-    /*
-    if (tts.isPlaying || tts.isLoading || (tts.duration > 0 && !tts.error)) {
-      setShowTTSPlayer(true);
-    }
-    */
-    setShowTTSPlayer(false); // Always keep the TTS player hidden for now
-  }, [tts.isPlaying, tts.isLoading, tts.duration, tts.error]);
-
-  const closeMediaPlayer = () => {
-    if (tts.isPlaying) {
-      tts.pause();
-    }
-    setShowTTSPlayer(false);
-  };
-
   // Function to close the popup, passed to WordPopup
   const closePopup = () => {
     setSelectedWord(null);
@@ -363,15 +336,13 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     }
     
     console.log(`[FRONTEND] Starting translation to ${language} (${readingAge}), region: ${region || 'default'}`);
-    // Log is redundant now as we process right above
-    // console.log(`[FRONTEND] Using content source: processedContent`); 
     setIsStreaming(true);
     setTranslationError(null);
-    // Set finalStreamedContent to empty, ready for new stream
     setFinalStreamedContent(''); 
     setStreamedTitle(''); 
     setStreamedLang(undefined);
-
+    setCurrentTranslationRegion(region);
+    
     // --- Pre-parse using the content just processed --- 
     console.log(`[FRONTEND] Content about to be pre-parsed (first 500 chars):`, contentToTranslate.substring(0, 500));
     const localPreservedMap = parseAndStorePreservedNodes(contentToTranslate);
@@ -521,6 +492,101 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     }
   };
 
+  // --- UPDATED: Function to handle TTS generation --- Includes Region ---
+  const handleListenClick = async () => {
+    // Determine the source of text content (remains the same)
+    let sourceText: string | null | undefined = null;
+    let sourceRegion: string | undefined = undefined; // <-- Variable for region
+    
+    if (finalStreamedContent && articleContentRef.current) {
+      // If translated content exists, use its text and the stored region
+      console.log("TTS: Using text content from translated content ref.");
+      sourceText = articleContentRef.current.textContent;
+      sourceRegion = currentTranslationRegion; // <-- Use stored region
+      console.log(`TTS: Using region: ${sourceRegion || 'none'}`);
+    } else {
+      // Otherwise, use the original article's textContent (no region applicable)
+      console.log("TTS: Using text content from original article prop.");
+      sourceText = article?.textContent;
+      sourceRegion = undefined; // No region for original text
+    }
+
+    if (!sourceText || isTTSLoading) {
+      console.log('TTS: Source text content missing or already loading.');
+      return;
+    }
+
+    setIsTTSLoading(true);
+    setTtsAudioUrl(null); // Clear previous audio
+    setTtsError(null);
+
+    try {
+      // Get the first 100 words (approximate) from the chosen source
+      const words = sourceText.split(/\s+/);
+      const textToSpeak = words.slice(0, 100).join(' ');
+      console.log(`TTS: Sending text (first 100 words): "${textToSpeak.substring(0, 70)}..."`);
+
+      // --- Using fetch with Anon Key --- (remains the same)
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!anonKey) {
+        console.error('TTS: Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable.');
+        throw new Error('Client configuration error.');
+      }
+      const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-tts`;
+
+      // --- Construct payload WITH region --- 
+      const payload: { text: string; region?: string } = { text: textToSpeak };
+      if (sourceRegion) {
+        payload.region = sourceRegion;
+      }
+      // --- End construct payload ---
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${anonKey}`,
+          'apikey': anonKey, 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload), // <-- Send payload with optional region
+      });
+
+      if (!response.ok) {
+        console.error(`TTS: Fetch error - Status: ${response.status}`);
+        let errorBody = 'Failed to generate speech.';
+        try {
+          const errorJson = await response.json(); 
+          errorBody = errorJson.error?.details || errorJson.error || errorJson.message || `HTTP error ${response.status}`;
+        } catch (parseErr) {
+          errorBody = await response.text().catch(() => `HTTP error ${response.status} - Failed to read error body`);
+          console.warn("TTS: Failed to parse error response as JSON, using text body:", errorBody);
+        }
+        throw new Error(errorBody);
+      }
+
+      const audioBlob = await response.blob();
+      console.log(`TTS: Received response as Blob (Size: ${audioBlob.size}, Type: ${audioBlob.type})`);
+
+      if (audioBlob.size === 0) {
+          throw new Error("Received empty audio blob.");
+      }
+      if (!audioBlob.type.startsWith('audio/')) {
+          console.warn(`TTS: Received Blob with unexpected type: ${audioBlob.type}`);
+      }
+
+      // Create a URL for the audio blob
+      const audioUrl = URL.createObjectURL(audioBlob);
+      setTtsAudioUrl(audioUrl);
+      console.log('TTS: Audio URL created successfully.');
+
+    } catch (err: any) {
+      console.error("Error generating TTS:", err);
+      setTtsError(err.message || 'An unknown error occurred during TTS generation.');
+    } finally {
+      setIsTTSLoading(false);
+    }
+  };
+
   // Function to cancel ongoing translation
   const handleCancelTranslate = () => {
     if (isStreaming && abortControllerRef.current) {
@@ -574,39 +640,16 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
         onCancel={handleCancelTranslate}
       />
     
-      <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200 ${showTTSPlayer ? 'pb-28' : ''}`}>
+      <div className={`max-w-3xl mx-auto px-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-lg shadow-sm transition-colors duration-200`}>
         <ArticleToolbar 
           isDarkMode={isDarkMode}
           toggleDarkMode={toggleDarkMode}
           toggleFontSize={toggleFontSize}
-          tts={{
-            isPlaying: tts.isPlaying,
-            isLoading: tts.isLoading,
-            progress: tts.progress,
-            error: tts.error,
-            toggleTTS
-          }}
           originalUrl={originalUrl}
           translationInfo={{ language: streamedLang }}
+          onListenClick={handleListenClick}
+          isTTSLoading={isTTSLoading}
         />
-
-        {showTTSPlayer && (
-          <TTSPlayer
-            tts={{
-              isPlaying: tts.isPlaying,
-              isLoading: tts.isLoading,
-              progress: tts.progress,
-              currentTime: tts.currentTime,
-              duration: tts.duration,
-              seekTo: tts.seekTo,
-              seekBackward: tts.seekBackward,
-              seekForward: tts.seekForward,
-              play: tts.play,
-              pause: tts.pause
-            }}
-            onClose={closeMediaPlayer}
-          />
-        )}
 
         <div className="p-6 md:p-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">{displayTitle}</h1>
@@ -618,6 +661,19 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             publishDate={publishDate}
           />
 
+          {ttsError && (
+            <div className="my-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+              <p><strong>Audio Error:</strong> {ttsError}</p>
+            </div>
+          )}
+          {ttsAudioUrl && (
+            <div className="my-4">
+              <audio controls src={ttsAudioUrl} className="w-full">
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          )}
+          
           {translationError && (
             <div className="my-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
               <p><strong>Translation Error:</strong> {translationError}</p>

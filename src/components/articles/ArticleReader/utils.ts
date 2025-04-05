@@ -1,6 +1,7 @@
 /**
  * Extracts readable text from an HTML article for TTS processing
  */
+/*
 export function extractArticleText(htmlContent: string): string {
   if (typeof document !== 'undefined') {
     const tempDiv = document.createElement('div');
@@ -37,7 +38,7 @@ export function extractArticleText(htmlContent: string): string {
     
     // Trim to avoid OpenAI API limits (approximately 32k chars)
     if (text.length > 30000) {
-      console.log('Article text too long, truncating for TTS');
+      // console.log('Article text too long, truncating for TTS'); // Removed TTS reference
       text = text.substring(0, 30000) + '... (Article continues)';
     }
     
@@ -45,13 +46,16 @@ export function extractArticleText(htmlContent: string): string {
   }
   return '';
 }
+*/
 
 /**
  * Formats time in seconds to MM:SS display format
  */
+/*
 export function formatTime(timeInSeconds: number): string {
   if (!timeInSeconds || isNaN(timeInSeconds)) return '00:00';
   const minutes = Math.floor(timeInSeconds / 60);
   const seconds = Math.floor(timeInSeconds % 60);
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-} 
+}
+*/ 
