@@ -12,9 +12,6 @@ interface ArticleToolbarProps {
     region?: string;
     language?: string;
   };
-  onListenClick: () => void;
-  isTTSLoading: boolean;
-  isStreaming: boolean;
 }
 
 export default function ArticleToolbar({
@@ -23,9 +20,6 @@ export default function ArticleToolbar({
   toggleFontSize,
   originalUrl,
   translationInfo,
-  onListenClick,
-  isTTSLoading,
-  isStreaming,
 }: ArticleToolbarProps) {
   
   // Helper function to get the flag emoji based on region
@@ -202,30 +196,6 @@ export default function ArticleToolbar({
                 strokeWidth={2} 
                 d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" 
               />
-            </svg>
-          )}
-        </button>
-        
-        <button
-          onClick={onListenClick}
-          disabled={isTTSLoading || isStreaming}
-          className={`p-2 rounded-full transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300 ${
-            (isTTSLoading || isStreaming) 
-              ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50'
-              : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-          }`}
-          aria-label="Listen to article"
-          title={isStreaming ? "Cannot listen while translating" : "Listen to article"}
-        >
-          {isTTSLoading ? (
-            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            // Speaker icon
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a.5.5 0 01.707 0L16.07 3.636a.5.5 0 010 .707L14.707 5.05a.5.5 0 01-.707 0L13.293 4.343a.5.5 0 010-.707l.707-.707a.5.5 0 01.657 0zm2.121 2.121a.5.5 0 01.707 0l.707.707a.5.5 0 010 .707l-1.414 1.414a.5.5 0 01-.707 0l-.707-.707a.5.5 0 010-.707l.707-.707a.5.5 0 01.707 0zM18.243 6.464a.5.5 0 01.707 0l.707.707a.5.5 0 010 .707l-2.121 2.121a.5.5 0 01-.707 0l-.707-.707a.5.5 0 010-.707l2.121-2.121a.5.5 0 01.707 0z" clipRule="evenodd" />
             </svg>
           )}
         </button>

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import React, { useRef, useEffect } from 'react';
+import { useWordPopup } from '@/hooks/useWordPopup'; // Import the custom hook
 
 // Remove PopupPosition interface if no longer needed elsewhere
 // export interface PopupPosition {
@@ -10,56 +10,12 @@ import { createClient } from '@supabase/supabase-js';
 // }
 
 export interface WordPopupProps {
-  word: string | null; // Allow null to control visibility/animation
-  sentence: string; // The full sentence containing the word
-  onClose: () => void; // Add onClose handler
+  hook: ReturnType<typeof useWordPopup>; // Pass the entire hook return object
 }
 
-// Initialize Supabase client - use environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const WordPopup: React.FC<WordPopupProps> = ({ word, sentence, onClose }) => { // Removed position, added onClose
-  const popupRef = useRef<HTMLDivElement>(null);
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [translatedText, setTranslatedText] = useState<string | null>(null);
-  const [translatedWord, setTranslatedWord] = useState<string | null>(null);
-  const [translationError, setTranslationError] = useState<string | null>(null);
-  
-  // State for grammar explanation
-  const [isExplaining, setIsExplaining] = useState(false);
-  const [explanation, setExplanation] = useState<{
-    explanation: string;
-    wordType: string;
-    examples?: string[];
-  } | null>(null);
-  const [explanationError, setExplanationError] = useState<string | null>(null);
-  
-  // New state for rephrasing
-  const [isRephrasing, setIsRephrasing] = useState(false);
-  const [rephrasedText, setRephrasedText] = useState<string | null>(null);
-  const [rephrasingError, setRephrasingError] = useState<string | null>(null);
-
-  // Reset all state when word changes or popup closes
-  useEffect(() => {
-    // Reset all state when the word changes or becomes null (closed)
-    setIsTranslating(false);
-    setTranslatedText(null);
-    setTranslatedWord(null);
-    setTranslationError(null);
-    setIsExplaining(false);
-    setExplanation(null);
-    setExplanationError(null);
-    setIsRephrasing(false);
-    setRephrasedText(null);
-    setRephrasingError(null);
-  }, [word]);
-
-  // Function to highlight a specific word in a text
-  const highlightWord = (text: string, wordToHighlight: string) => {
-    if (!wordToHighlight) return text;
-    // Use regex to match the word with word boundaries to avoid partial matches
+// Function to highlight a specific word in a text (Can be moved to utils if needed elsewhere)
+const highlightWord = (text: string, wordToHighlight: string | null) => {
+  if (!text || !wordToHighlight) return text;
     const regex = new RegExp(`\\b${wordToHighlight}\\b`, 'gi');
     return text.replace(
       regex, 
@@ -67,438 +23,194 @@ const WordPopup: React.FC<WordPopupProps> = ({ word, sentence, onClose }) => { /
     );
   };
 
-  // Maximum number of retries for API calls
-  const MAX_RETRIES = 3;
+const WordPopup: React.FC<WordPopupProps> = ({ hook }) => {
+  const popupRef = useRef<HTMLDivElement>(null);
 
-  // Function to call the translation API with retries
-  const callTranslationAPI = async (retriesLeft = MAX_RETRIES) => {
-    try {
-      // Call Supabase function to translate
-      const { data, error } = await supabase.functions.invoke('translate-text', {
-        body: { 
-          text: sentence,
-          targetWord: word
-        }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error(`Translation attempt failed (${retriesLeft} retries left):`, error);
-      
-      if (retriesLeft <= 0) {
-        throw error;
-      }
-      
-      // Wait a bit before retrying (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, (MAX_RETRIES - retriesLeft + 1) * 500));
-      return callTranslationAPI(retriesLeft - 1);
-    }
-  };
-
-  // Function to call the grammar explanation API with retries
-  const callExplanationAPI = async (retriesLeft = MAX_RETRIES) => {
-    try {
-      // Call Supabase function to explain grammar
-      const { data, error } = await supabase.functions.invoke('explain-grammar', {
-        body: { 
-          text: sentence,
-          targetWord: word
-        }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error(`Explanation attempt failed (${retriesLeft} retries left):`, error);
-      
-      if (retriesLeft <= 0) {
-        throw error;
-      }
-      
-      // Wait a bit before retrying (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, (MAX_RETRIES - retriesLeft + 1) * 500));
-      return callExplanationAPI(retriesLeft - 1);
-    }
-  };
-  
-  // Function to call the rephrase API with retries
-  const callRephraseAPI = async (retriesLeft = MAX_RETRIES) => {
-    try {
-      // Call Supabase function to rephrase text
-      const { data, error } = await supabase.functions.invoke('rephrase-text', {
-        body: { 
-          text: sentence,
-          targetWord: word
-        }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error(`Rephrasing attempt failed (${retriesLeft} retries left):`, error);
-      
-      if (retriesLeft <= 0) {
-        throw error;
-      }
-      
-      // Wait a bit before retrying (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, (MAX_RETRIES - retriesLeft + 1) * 500));
-      return callRephraseAPI(retriesLeft - 1);
-    }
-  };
-
-  // Function to translate the sentence
-  const translateSentence = async () => {
-    if (!sentence) return;
-    
-    setIsTranslating(true);
-    setTranslatedText(null);
-    setTranslatedWord(null);
-    setTranslationError(null);
-    
-    try {
-      const data = await callTranslationAPI();
-      
-      setTranslatedText(data?.translatedText || 'No translation available');
-      setTranslatedWord(data?.translatedWord || null);
-    } catch (error) {
-      console.error('Translation error details:', error);
-      setTranslationError(
-        error instanceof Error 
-        ? error.message 
-        : 'Failed to translate. Please try again.'
-      );
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  // Function to explain the grammar
-  const explainGrammar = async () => {
-    if (!sentence || !word) return;
-    
-    setIsExplaining(true);
-    setExplanation(null);
-    setExplanationError(null);
-    
-    try {
-      const data = await callExplanationAPI();
-      
-      setExplanation({
-        explanation: data?.explanation || 'No explanation available',
-        wordType: data?.wordType || 'unknown',
-        examples: data?.examples
-      });
-    } catch (error) {
-      console.error('Explanation error details:', error);
-      setExplanationError(
-        error instanceof Error 
-        ? error.message 
-        : 'Failed to explain grammar. Please try again.'
-      );
-    } finally {
-      setIsExplaining(false);
-    }
-  };
-  
-  // Function to rephrase the sentence
-  const rephraseText = async () => {
-    if (!sentence) return;
-    
-    setIsRephrasing(true);
-    setRephrasedText(null);
-    setRephrasingError(null);
-    
-    try {
-      const data = await callRephraseAPI();
-      
-      setRephrasedText(data?.rephrasedText || 'No rephrased text available');
-    } catch (error) {
-      console.error('Rephrasing error details:', error);
-      setRephrasingError(
-        error instanceof Error 
-        ? error.message 
-        : 'Failed to rephrase text. Please try again.'
-      );
-    } finally {
-      setIsRephrasing(false);
-    }
-  };
+  // Destructure necessary values and functions from the hook
+  const {
+    word, 
+    sentence, 
+    isActive,
+    closePopup,
+    translateSentence,
+    explainGrammar,
+    rephraseText,
+    isTranslating,
+    translatedText,
+    translatedWord,
+    translationError,
+    isExplaining,
+    explanation,
+    explanationError,
+    isRephrasing,
+    rephrasedText,
+    rephrasingError
+  } = hook;
 
   // Display the original sentence with the clicked word highlighted
-  const highlightedSentence = sentence && word ? highlightWord(sentence, word) : (sentence || '');
+  const highlightedSentence = highlightWord(sentence, word);
+  const highlightedTranslatedSentence = translatedText ? highlightWord(translatedText, translatedWord) : null;
+  const highlightedRephrasedSentence = rephrasedText ? highlightWord(rephrasedText, word) : null;
+
+  // Effect to adjust scroll/focus? (Consider if needed, maybe hook manages this?)
+  useEffect(() => {
+    // Potentially scroll popup content to top when word changes?
+    if (popupRef.current) {
+      popupRef.current.scrollTop = 0;
+    }
+  }, [word]);
 
   return (
     <div
       ref={popupRef}
-      // Default: bottom sheet (mobile-first)
-      // lg: sidebar from right
       className={`word-popup fixed z-50 bg-white dark:bg-gray-800 shadow-lg border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out \
         bottom-0 left-0 right-0 rounded-t-lg border-t lg:border-t-0 \
-        lg:top-16 lg:bottom-0 lg:left-auto lg:right-0 lg:w-96 lg:rounded-l-lg lg:rounded-t-none lg:border-l \
-        ${word ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-x-full'}`}
-      // Use 'word' presence to control translate-y/x for animation based on screen size
-      style={{ minHeight: '150px' }} // Keep min-height for bottom sheet
+        lg:top-16 lg:bottom-0 lg:left-auto lg:right-0 lg:w-96 lg:rounded-l-lg lg:rounded-t-none lg:border-l overflow-y-auto \
+        ${isActive ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-x-full'}`}
+        aria-hidden={!isActive}
     >
-      {/* Default: max-width container for bottom sheet */}
-      {/* lg: No max-width for sidebar */}
-      <div className="max-w-3xl mx-auto relative h-full lg:max-w-none lg:mx-0">
-        {/* Close button - position adjusted slightly for lg screens */}
+      {/* Header */} 
+      <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 px-4 py-3 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {word || 'Word Details'}
+        </h3>
         <button
-          onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-2 z-10" // Ensure button is above content
-          aria-label="Close word popup"
+          onClick={closePopup}
+          className="p-1 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          aria-label="Close popup"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          {/* Close Icon */}
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
+            </div>
 
-        {/* Content area with padding */}
-        {/* Added overflow-y-auto for sidebar if content is long */}
-        <div className="pt-10 p-4 lg:p-6 h-full overflow-y-auto">
-          {word && ( // Only show word if it exists
-            <div className="font-medium text-base md:text-lg text-center lg:text-left text-indigo-600 dark:text-indigo-400 mb-4 underline decoration-indigo-300 dark:decoration-indigo-600 underline-offset-2">
-              {word}
+      {/* Content Area */} 
+      <div className="p-4 space-y-5">
+        {/* Original Sentence */} 
+        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <p 
+            className="text-gray-800 dark:text-gray-200 text-base leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: highlightedSentence }}
+          />
             </div>
-          )}
-          
-          {/* Show translation results if available */}
-          {translatedText && (
-            <div className="mb-3 space-y-2 border-b border-gray-200 dark:border-gray-700 pb-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Original:</span>
-                <p dangerouslySetInnerHTML={{ __html: highlightedSentence }} />
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Translation:</span>
-                <p dangerouslySetInnerHTML={{ 
-                  __html: translatedWord && translatedText 
-                    ? highlightWord(translatedText, translatedWord) 
-                    : (translatedText || '') // Ensure string even if no translatedWord
-                }} />
-              </div>
-            </div>
-          )}
-          
-          {/* Show grammar explanation if available */}
-          {explanation && (
-            <div className="mb-3 space-y-2 border-b border-gray-200 dark:border-gray-700 pb-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Word Type:</span>
-                <p className="inline-block ml-1 font-medium text-indigo-600 dark:text-indigo-400">{explanation.wordType}</p>
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Explanation:</span>
-                <p>{explanation.explanation}</p>
-              </div>
-              {explanation.examples && explanation.examples.length > 0 && (
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Examples:</span>
-                  <ul className="list-disc pl-4 mt-1">
-                    {explanation.examples.map((example, index) => (
-                      <li key={index}>{example}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Show rephrased text if available */}
-          {rephrasedText && (
-            <div className="mb-3 space-y-2 border-b border-gray-200 dark:border-gray-700 pb-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Original:</span>
-                <p dangerouslySetInnerHTML={{ __html: highlightedSentence }} />
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Simplified:</span>
-                <p>{rephrasedText}</p>
-              </div>
-            </div>
-          )}
-          
-          {/* Show error if translation failed */}
-          {translationError && (
-            <div className="text-red-500 dark:text-red-400 text-sm mb-2">
-              {translationError}
-            </div>
-          )}
-          
-          {/* Show error if explanation failed */}
-          {explanationError && (
-            <div className="text-red-500 dark:text-red-400 text-sm mb-2">
-              {explanationError}
-            </div>
-          )}
-          
-          {/* Show error if rephrasing failed */}
-          {rephrasingError && (
-            <div className="text-red-500 dark:text-red-400 text-sm mb-2">
-              {rephrasingError}
-            </div>
-          )}
-          
-          {/* Only show the options menu when no results are displayed */}
-          {!translatedText && !explanation && !rephrasedText && word && ( // Check word exists before showing options
-            <>
+
+        {/* Action Buttons */} 
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-1 gap-2">
+          {/* Translate Button */} 
               <button
-                className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 mb-1" // Always justify-start on lg
+            className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800"
                 onClick={translateSentence}
                 disabled={isTranslating}
               >
                 {isTranslating ? (
                   <>
-                    <svg 
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-indigo-500 dark:text-indigo-400" 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      fill="none" 
-                      viewBox="0 0 24 24"
-                    >
-                      <circle 
-                        className="opacity-25" 
-                        cx="12" 
-                        cy="12" 
-                        r="10" 
-                        stroke="currentColor" 
-                        strokeWidth="4"
-                      />
-                      <path 
-                        className="opacity-75" 
-                        fill="currentColor" 
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
+                {/* Spinner Icon */}
+                <svg className="animate-spin h-4 w-4 text-indigo-500 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                     <span>Translating...</span>
                   </>
                 ) : (
                   <>
-                    <svg 
-                      className="w-4 h-4 mr-2 text-indigo-500 dark:text-indigo-400" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24" 
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                      />
-                    </svg>
+                {/* Translate Icon */}
+                <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" /></svg>
                     <span>Translate</span>
                   </>
                 )}
               </button>
+          {/* Explain Grammar Button */} 
               <button
-                className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 mb-1" // Always justify-start on lg
+            className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800"
                 onClick={explainGrammar}
                 disabled={isExplaining}
               >
                 {isExplaining ? (
                   <>
-                    <svg 
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-indigo-500 dark:text-indigo-400" 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      fill="none" 
-                      viewBox="0 0 24 24"
-                    >
-                      <circle 
-                        className="opacity-25" 
-                        cx="12" 
-                        cy="12" 
-                        r="10" 
-                        stroke="currentColor" 
-                        strokeWidth="4"
-                      />
-                      <path 
-                        className="opacity-75" 
-                        fill="currentColor" 
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
+                {/* Spinner Icon */}
+                <svg className="animate-spin h-4 w-4 text-indigo-500 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                     <span>Analyzing...</span>
                   </>
                 ) : (
                   <>
-                    <svg 
-                      className="w-4 h-4 mr-2 text-indigo-500 dark:text-indigo-400" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24" 
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                      />
-                    </svg>
-                    <span>Explain</span>
+                {/* Grammar Icon */}
+                <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                <span>Explain Grammar</span>
                   </>
                 )}
               </button>
+          {/* Rephrase Button */} 
               <button
-                className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 mb-1" // Always justify-start on lg
+            className="w-full text-left px-3 py-2 rounded-md text-gray-800 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center md:justify-start lg:justify-start space-x-2 border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800"
                 onClick={rephraseText}
                 disabled={isRephrasing}
               >
                 {isRephrasing ? (
                   <>
-                    <svg 
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-indigo-500 dark:text-indigo-400" 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      fill="none" 
-                      viewBox="0 0 24 24"
-                    >
-                      <circle 
-                        className="opacity-25" 
-                        cx="12" 
-                        cy="12" 
-                        r="10" 
-                        stroke="currentColor" 
-                        strokeWidth="4"
-                      />
-                      <path 
-                        className="opacity-75" 
-                        fill="currentColor" 
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
+                {/* Spinner Icon */}
+                <svg className="animate-spin h-4 w-4 text-indigo-500 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                     <span>Simplifying...</span>
                   </>
                 ) : (
                   <>
-                    <svg 
-                      className="w-4 h-4 mr-2 text-indigo-500 dark:text-indigo-400" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24" 
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                    <span>Simplify</span>
+                {/* Rephrase Icon */}
+                <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                <span>Simplify Text</span>
                   </>
                 )}
               </button>
-            </>
+        </div>
+        
+        {/* Results Area */} 
+        <div className="space-y-4">
+          {/* Translation Result/Error */} 
+          {translationError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-700 dark:text-red-300"><strong>Error:</strong> {translationError}</p>
+            </div>
+          )}
+          {translatedText && (
+            <div className="p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+              <p 
+                className="text-sm text-green-800 dark:text-green-200 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: highlightedTranslatedSentence || '' }}
+              />
+            </div>
+          )}
+
+          {/* Grammar Explanation Result/Error */} 
+          {explanationError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-700 dark:text-red-300"><strong>Error:</strong> {explanationError}</p>
+            </div>
+          )}
+          {explanation && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg space-y-2">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong className="font-medium">({explanation.wordType}):</strong> {explanation.explanation}
+              </p>
+              {explanation.examples && explanation.examples.length > 0 && (
+                <ul className="list-disc list-inside pl-2 space-y-1">
+                  {explanation.examples.map((ex, index) => (
+                    <li key={index} className="text-xs text-blue-700 dark:text-blue-300 italic">
+                      {ex}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Rephrasing Result/Error */} 
+          {rephrasingError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-700 dark:text-red-300"><strong>Error:</strong> {rephrasingError}</p>
+            </div>
+          )}
+          {rephrasedText && (
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+              <p 
+                className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: highlightedRephrasedSentence || '' }}
+              />
+            </div>
           )}
         </div>
       </div>
