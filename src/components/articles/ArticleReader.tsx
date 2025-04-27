@@ -68,13 +68,14 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   // --- Destructure Hook Values --- 
   const { handleWordClick } = wordPopupHook;
   const { 
-    isTTSLoading, 
-    ttsAudioUrl, 
-    ttsAudioMetadata, 
-    hasNextTTSChunk, 
-    currentTTSChunkIndex, 
-    generateTTSChunk, 
-    resetTTS 
+    isGeneratingChunk,
+    ttsAudioUrls,
+    ttsError,
+    ttsAudioMetadatas,
+    highestGeneratedChunkIndex,
+    generateTTSChunk: generateTTSChunkFromHook,
+    resetTTS, 
+    estimatedTotalParts 
   } = ttsHook;
   const { 
     isStreaming, 
@@ -145,9 +146,9 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   };
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
-  const callGenerateTTS = (index: number) => {
+  const callGenerateTTS = async (index: number): Promise<void> => {
     const isOriginal = !finalStreamedContent;
-    generateTTSChunk(
+    await generateTTSChunkFromHook(
       index, 
       isOriginal, 
       isOriginal ? undefined : currentTranslationRegion,
@@ -204,28 +205,25 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
             publishDate={publishDate}
           />
 
-          {ttsHook.ttsError && (
+          {ttsError && (
             <div className="my-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-              <p><strong>Audio Error:</strong> {ttsHook.ttsError}</p>
+              <p><strong>Audio Error:</strong> {ttsError}</p>
             </div>
           )}
 
-          { (() => {
-            const isListenButtonDisabled = isTTSLoading || (isStreaming && !isTTSReadyForFirstChunk);
-            return (
+          { estimatedTotalParts > 0 && (
               <TTSPlayer
-                isListenButtonDisabled={isListenButtonDisabled}
-                onListenClick={() => callGenerateTTS(0)}
-                isTTSLoading={isTTSLoading}
+                isGeneratingChunk={isGeneratingChunk}
+                ttsAudioUrls={ttsAudioUrls}
+                ttsError={ttsError}
+                ttsAudioMetadatas={ttsAudioMetadatas}
+                highestGeneratedChunkIndex={highestGeneratedChunkIndex}
+                generateTTSChunk={callGenerateTTS}
+                estimatedTotalParts={estimatedTotalParts}
                 isStreaming={isStreaming} 
-                ttsAudioUrl={ttsAudioUrl}
-                ttsAudioMetadata={ttsAudioMetadata}
-                hasNextTTSChunk={hasNextTTSChunk}
-                currentTTSChunkIndex={currentTTSChunkIndex}
-                onContinueListening={callGenerateTTS}
+                isListenButtonDisabled={isStreaming && !isTTSReadyForFirstChunk}
               />
-            );
-          })() }
+          )}
           
           {translationHook.translationError && (
             <div className="my-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
@@ -297,6 +295,37 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         position: relative;
       }
       
+      /* Add relative positioning to the new image container */
+      .article-content .image-container {
+        position: relative; /* Ensure the container is positioned relatively */
+        display: inline-block; /* Or block, depending on desired layout */
+        width: 100%; /* Take full width */
+        margin-bottom: 1.5rem; /* Replicate figure margin */
+      }
+      
+      .article-content .image-container img {
+        display: block; /* Ensure image is block level */
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto; /* Center if needed */
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      }
+
+      .article-content .image-source-overlay {
+        position: absolute;
+        bottom: 0.5rem; /* Adjust spacing from bottom */
+        right: 0.5rem; /* Adjust spacing from right */
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        border-radius: 0.25rem;
+        z-index: 10; /* Ensure it stays on top */
+        font-style: normal; /* Override potential figcaption italic style */
+      }
+
       .article-content img {
         max-width: 100%;
         height: auto;
@@ -354,6 +383,13 @@ function ArticleStyles({ isDarkMode, fontSize }: { isDarkMode: boolean, fontSize
         border-radius: 0.5rem;
         overflow-x: auto;
         margin: 1.5rem 0;
+      }
+      
+      .article-content pre code {
+        background-color: transparent;
+        padding: 0;
+        border-radius: 0;
+        font-size: inherit; /* Use pre's font size */
       }
       
       .article-content code {
