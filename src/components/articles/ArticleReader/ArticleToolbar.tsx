@@ -1,18 +1,12 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { getLanguageName, getRegionName } from '@/utils/translationUtils';
 
 interface ArticleToolbarProps {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   toggleFontSize: (size: number) => void;
-  tts: {
-    isPlaying: boolean;
-    isLoading: boolean;
-    progress: number;
-    error: string | null;
-    toggleTTS: () => void;
-  };
   originalUrl?: string;
   translationInfo?: {
     region?: string;
@@ -24,9 +18,8 @@ export default function ArticleToolbar({
   isDarkMode,
   toggleDarkMode,
   toggleFontSize,
-  tts,
   originalUrl,
-  translationInfo
+  translationInfo,
 }: ArticleToolbarProps) {
   
   // Helper function to get the flag emoji based on region
@@ -64,55 +57,7 @@ export default function ArticleToolbar({
     return flagMap[region] || '';
   };
   
-  // Helper function to get language name from code
-  const getLanguageName = (code?: string): string => {
-    if (!code) return '';
-    
-    const languageMap: {[key: string]: string} = {
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'pt': 'Portuguese'
-    };
-    
-    return languageMap[code] || code;
-  };
-  
-  // Helper function to get region name from code
-  const getRegionName = (region?: string): string => {
-    if (!region) return '';
-    
-    const regionMap: {[key: string]: string} = {
-      // Spanish regions
-      'es': 'Spain',
-      'mx': 'Mexico',
-      'co': 'Colombia',
-      'ar': 'Argentina',
-      'pe': 'Peru',
-      'cl': 'Chile',
-      
-      // French regions
-      'fr': 'France',
-      'ca': 'Canada',
-      'be': 'Belgium',
-      'ch': 'Switzerland',
-      
-      // German regions
-      'de': 'Germany',
-      'at': 'Austria',
-      
-      // Italian regions
-      'it': 'Italy',
-      
-      // Portuguese regions
-      'pt': 'Portugal',
-      'br': 'Brazil',
-    };
-    
-    return regionMap[region] || region;
-  };
-  
+  // Use imported functions
   const flagEmoji = translationInfo?.region ? getRegionFlag(translationInfo.region) : '';
   const languageName = getLanguageName(translationInfo?.language);
   const regionName = getRegionName(translationInfo?.region);
@@ -255,8 +200,6 @@ export default function ArticleToolbar({
           )}
         </button>
         
-        {/* Text-to-speech button removed temporarily */}
-        
         {originalUrl && (
           <a
             href={originalUrl}
@@ -296,12 +239,6 @@ export default function ArticleToolbar({
           </div>
         )}
       </div>
-      
-      {tts.error && (
-        <div className="absolute top-full left-0 right-0 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs p-2 rounded-b-lg">
-          {tts.error}
-        </div>
-      )}
     </div>
   );
 } 

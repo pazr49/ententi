@@ -128,11 +128,56 @@ export const bbcProcessor: ArticleProcessor = {
         mainContainer.querySelectorAll('img[src*="ichef.bbci.co.uk"]').forEach(img => {
           const src = img.getAttribute('src');
           if (src && src.includes('/standard/')) {
-            const highResSrc = src.replace(/\/standard\/\d+\//, '/standard/976/');
+            const highResSrc = src.replace(/\/standard\/\d+\//, '/standard/976/'); // Use 976 for better resolution
             img.setAttribute('src', highResSrc);
+            // Also update srcset if present
+            const srcset = img.getAttribute('srcset');
+            if (srcset) {
+              const updatedSrcset = srcset.replace(/\/standard\/\d+\//g, '/standard/976/');
+              img.setAttribute('srcset', updatedSrcset);
+            }
           }
         });
-    
+
+        // --- Process image blocks to overlay source text ---
+        mainContainer.querySelectorAll('div[data-component="image-block"]').forEach(imageBlock => {
+            const img = imageBlock.querySelector('img');
+            const sourceSpan = imageBlock.querySelector('p > span:last-child'); // Try to find the source span more specifically
+
+            if (img && sourceSpan && sourceSpan.textContent?.trim()) {
+                // Check if this structure is already processed
+                if (imageBlock.querySelector('.image-container')) return;
+
+                console.log('Processing image block for overlay. Source:', sourceSpan.textContent);
+                const container = document.createElement('div');
+                container.className = 'image-container'; // Add class for relative positioning
+
+                // Move the image into the new container
+                container.appendChild(img.cloneNode(true));
+
+                // Style and move the source span
+                const overlaySpan = sourceSpan.cloneNode(true) as HTMLSpanElement;
+                overlaySpan.className = 'image-source-overlay'; // Add class for absolute positioning and styling
+                container.appendChild(overlaySpan);
+
+                // Replace the original image block's content (likely the <p>) with the new container
+                const pElement = img.closest('p');
+                if (pElement && pElement.parentNode === imageBlock) {
+                    imageBlock.replaceChild(container, pElement);
+                } else {
+                    // Fallback: clear the block and add the new container
+                    imageBlock.innerHTML = '';
+                    imageBlock.appendChild(container);
+                }
+            } else if (img && !sourceSpan) {
+                 // If there's an image but no source span found in the expected place,
+                 // wrap just the image to ensure consistent structure if needed later,
+                 // or just leave it if styling works without the container.
+                 // For now, let's only wrap if there's a source to overlay.
+                 console.log('Image block found, but no source span identified within p > span:last-child');
+            }
+        });
+
         // Apply common styling *to the main container*
         applyCommonStyling(mainContainer as HTMLDivElement);
 
