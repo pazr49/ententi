@@ -24,6 +24,7 @@ interface ArticleReaderProps {
 }
 
 // --- Helper function to check if an element should be preserved (Mirrors backend) ---
+/* Commented out as it's currently not used
 const isPreservable = (element: Element): boolean => {
   const tagName = element.tagName.toLowerCase();
   return (
@@ -38,7 +39,7 @@ const isPreservable = (element: Element): boolean => {
     // Add other specific publication selectors here
   );
 };
-
+*/
 
 // --- End Helper Functions ---
 

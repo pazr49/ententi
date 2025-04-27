@@ -54,6 +54,7 @@ const extractSentence = (element: HTMLElement, targetWord: string): string => {
 // --- API Call Helpers (with Retries) ---
 const MAX_RETRIES = 3;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const callAPI = async (functionName: string, body: any, retriesLeft = MAX_RETRIES): Promise<any> => {
   try {
     const { data, error } = await supabase.functions.invoke(functionName, { body });

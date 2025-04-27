@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ReadableArticle } from '@/utils/readability'; // Assuming this type might be useful
 import { processArticle } from '@/utils/articleProcessors'; // Need this for pre-processing
 import { SupabaseClient } from '@supabase/supabase-js';

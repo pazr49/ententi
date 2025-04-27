@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, RefObject, useMemo } from 'react';
-import { getLanguageName, getRegionName } from '@/utils/translationUtils'; // Needed for metadata
+import { useState, useCallback, useEffect, RefObject } from 'react';
 
 // Types for state
 export interface TTSAudioMetadata {
@@ -92,6 +91,7 @@ export const useTTS = ({ articleContentRef }: UseTTSProps): UseTTSReturn => {
     setTtsLastElementProcessedIndices(new Map());
     // Keep estimatedTotalParts as it depends on content ref
     console.log("[useTTS] Reset TTS state.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // REMOVED ttsAudioUrls dependency
 
   const isGeneratingChunk = useCallback((chunkIndex: number): boolean => {
