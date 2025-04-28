@@ -76,40 +76,7 @@
 
 6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## 🌟 Use Cases
-
-### For Language Learners
-- **Immersive Reading**: Access authentic content that matches your current level
-- **Vocabulary Building**: Interact with words in context for better retention
-- **Pronunciation Practice**: Listen to native-like pronunciation and practice speaking
-
-### For Language Teachers
-- **Customized Materials**: Create level-appropriate reading materials from current events
-- **Engaging Homework**: Assign reading that adapts to each student's level
-- **Progress Tracking**: Monitor student engagement with reading materials
-
-## 🔒 Privacy & Security
-
-Ententi is designed with privacy in mind. All user data and preferences are securely stored in Supabase, and API keys are handled securely through environment variables.
-
-## 📱 Mobile Experience
-
-The app is fully responsive and works beautifully on mobile devices, allowing language learners to practice on the go.
-
-## 🔜 Roadmap
-
-- Reading comprehension quizzes
-- Social learning features
-- Spaced repetition for vocabulary
-- Progress analytics
-- Native mobile apps
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
-
-- Mozilla Readability for their incredible content extraction library
-- The Supabase team for their robust backend services
-- OpenAI and Google for their powerful AI APIs
