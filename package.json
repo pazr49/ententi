@@ -1,7 +1,8 @@
 {
-  "name": "pocket-clone",
+  "name": "ententi",
   "version": "0.1.0",
   "private": true,
+  "description": "AI-powered reading platform for language learners with translation and text-to-speech capabilities",
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:network": "next dev --turbopack --hostname 0.0.0.0",

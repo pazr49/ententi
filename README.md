@@ -1,144 +1,115 @@
-# Pocket Clone
+# Ententi: Smart Reading for Language Learners
 
-A simple clone of Pocket (getpocket.com) for saving and reading articles in a clean, distraction-free environment.
+**Ententi** is an AI-powered reading platform designed specifically for language learners. It transforms online content into personalized, accessible reading materials with translation at your preferred reading level and text-to-speech capabilities for pronunciation practice.
 
-## Features
+![Ententi Screenshot](public/og_image.png)
 
-- Save articles from RSS feeds
-- Read articles in a clean, distraction-free environment
-- Dark mode support
-- Responsive design
-- User authentication with Supabase
-- User profiles
+## 🚀 Key Features
 
-## Supabase Integration
+### 📖 Simplified Reading Experience
+- **Distraction-Free Interface**: Focus solely on the content in a clean, modern UI
+- **Variable Reading Levels**: Have text translated to match your current language proficiency
+- **Word-Level Interactions**: Tap on any word for instant definitions and translations
 
-The app uses Supabase as a backend to store saved articles and handle user authentication. This allows for persistent storage across devices and sessions.
+### 🎧 Audio Learning Support
+- **Text-to-Speech Playback**: Listen to articles in your target language with high-quality natural voices
+- **Adjustable Speed Controls**: Slow down playback for better comprehension
+- **Synchronized Text Highlighting**: Follow along visually as the text is read
 
-### Supabase Setup
+### 📱 Content Management
+- **Save Articles From Anywhere**: Save content via URL sharing or direct pasting
+- **RSS Feed Integration**: Discover and save content from curated language-learning resources
+- **Offline Access**: Read saved content even without an internet connection
 
-1. Create a Supabase account at [supabase.com](https://supabase.com)
-2. Create a new project
-3. Set up the database tables by running the SQL in the `supabase-setup.sql` and `supabase-auth-setup.sql` files:
-   - Go to your Supabase project dashboard
-   - Click on "SQL Editor" in the left sidebar
-   - Create a "New Query"
-   - Copy and paste the contents of `supabase-setup.sql`
-   - Click "Run" to execute the SQL
-   - Create another "New Query"
-   - Copy and paste the contents of `supabase-auth-setup.sql`
-   - Click "Run" to execute the SQL
+### 🧠 AI-Powered Language Tools
+- **Reading Age Adaptation**: Automatically adjust content complexity to match your language level
+- **Contextual Word Explanations**: Get definitions appropriate to the context
+- **Grammar Explanations**: Understand complex sentence structures with AI assistance
 
-4. **Fix user deletion issues** by running the cascade delete SQL:
-   - Create another "New Query"
-   - Copy and paste the contents of `supabase-cascade-delete.sql`
-   - Click "Run" to execute the SQL
-   - This script will:
-     - Check if the required tables exist and create them if they don't
-     - Add CASCADE DELETE rules to foreign key constraints
-     - Create a trigger to safely handle user deletion
-     - This allows you to delete users from the Supabase dashboard without errors
+## 💻 Tech Stack
 
-5. Copy your Supabase URL and anon key from the project settings:
-   - Go to Project Settings > API
-   - Copy the URL (should look like `https://your-project-id.supabase.co`)
-   - Copy the `anon` key
-   
-6. Create a `.env.local` file in the root of the project with the following content:
+- **Frontend**: Next.js 15, React 19, Tailwind CSS 4, Framer Motion
+- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions)
+- **AI Services**: 
+  - OpenAI API for high-quality text-to-speech
+  - Gemini API for intelligent content translation
+- **Content Processing**: Mozilla Readability for clean article extraction
 
-```
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-```
+## 🛠 Getting Started
 
-### Authentication Setup
+### Prerequisites
+- Node.js 20+
+- npm/yarn/pnpm
+- Supabase account
+- OpenAI API key
+- Google AI (Gemini) API key
 
-The app includes a complete authentication system with the following features:
+### Installation
 
-- User registration and login
-- Password reset
-- Protected routes
-- User profiles
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ententi.git
+   cd ententi
+   ```
 
-After running the `supabase-auth-setup.sql` script, you'll need to configure authentication in your Supabase project:
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-1. Go to Authentication > Settings in your Supabase dashboard
-2. Under "Site URL", enter your app's URL (e.g., `http://localhost:3000` for development)
-3. Under "Redirect URLs", add the following URLs:
-   - `http://localhost:3000/auth/callback` (for development)
-   - `https://your-production-domain.com/auth/callback` (for production)
-4. Save the changes
+3. Create a `.env.local` file with the following variables:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   OPENAI_API_KEY=your_openai_api_key
+   ```
 
-By default, Supabase requires email confirmation. You can disable this for development:
+4. Set up your Supabase project:
+   - Create a new Supabase project
+   - Run the SQL scripts in the `supabase` directory
+   - Configure Supabase Edge Functions with your Gemini API key
 
-1. Go to Authentication > Providers > Email
-2. Toggle off "Confirm email" if you want to skip email confirmation during development
-3. Save the changes
+5. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-## Getting Started
+6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-First, install the dependencies:
+## 🌟 Use Cases
 
-```bash
-npm install
-# or
-yarn install
-# or
-pnpm install
-```
+### For Language Learners
+- **Immersive Reading**: Access authentic content that matches your current level
+- **Vocabulary Building**: Interact with words in context for better retention
+- **Pronunciation Practice**: Listen to native-like pronunciation and practice speaking
 
-Then, run the development server:
+### For Language Teachers
+- **Customized Materials**: Create level-appropriate reading materials from current events
+- **Engaging Homework**: Assign reading that adapts to each student's level
+- **Progress Tracking**: Monitor student engagement with reading materials
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-```
+## 🔒 Privacy & Security
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ententi is designed with privacy in mind. All user data and preferences are securely stored in Supabase, and API keys are handled securely through environment variables.
 
-## Technologies Used
+## 📱 Mobile Experience
 
-- Next.js
-- React
-- Tailwind CSS
-- RSS Parser
-- Mozilla Readability
-- Supabase (Database and Authentication)
+The app is fully responsive and works beautifully on mobile devices, allowing language learners to practice on the go.
 
-## Future Improvements
+## 🔜 Roadmap
 
-- Custom RSS feed sources
-- Article categorization and tagging
-- Search functionality
-- Reading progress tracking
-- Offline support
-- Social sharing
+- Reading comprehension quizzes
+- Social learning features
+- Spaced repetition for vocabulary
+- Progress analytics
+- Native mobile apps
 
-## License
+## 📄 License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Troubleshooting
+## 🙏 Acknowledgments
 
-### Database Issues
-
-If you encounter database-related errors:
-
-1. **"Failed to delete user: Database error deleting user"**:
-   - Run the `supabase-cascade-delete.sql` script in the SQL Editor
-   - This script fixes foreign key constraints and adds proper CASCADE DELETE rules
-   - It also creates missing tables if they don't exist
-
-2. **"Relation does not exist" errors**:
-   - Make sure you've run all the SQL setup scripts in the correct order:
-     1. `supabase-setup.sql`
-     2. `supabase-auth-setup.sql`
-     3. `supabase-cascade-delete.sql`
-
-3. **Authentication issues**:
-   - Check your Supabase authentication settings in the dashboard
-   - Ensure the Site URL and Redirect URLs are configured correctly
-   - For development, you may want to disable email confirmation
+- Mozilla Readability for their incredible content extraction library
+- The Supabase team for their robust backend services
+- OpenAI and Google for their powerful AI APIs
