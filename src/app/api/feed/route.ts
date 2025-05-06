@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { fetchRssFeed } from '@/utils/rss';
 
+export const dynamic = 'force-dynamic'; // Ensure the route is always dynamic
+
 export async function GET() {
   try {
     const feed = await fetchRssFeed();

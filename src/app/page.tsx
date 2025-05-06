@@ -4,6 +4,8 @@ import { feeds } from '@/utils/feedConfig';
 import { ClientWrapper } from '@/components/feed';
 import { UrlSubmitWrapper } from '@/components/common';
 
+export const revalidate = 3600; // Revalidate at most every hour
+
 async function MultiFeeds() {
   const allFeeds = await fetchMultipleFeeds(feeds);
   

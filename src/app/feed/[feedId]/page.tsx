@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { scrapeColombiaOne } from '@/utils/articleProcessors/colombiaOneScraper';
 
+export const revalidate = 3600; // Revalidate at most every hour
+
 // Generate static paths for all feeds
 export function generateStaticParams() {
   const feedIds = getAllFeedIds();

@@ -3,6 +3,8 @@ import { fetchSingleRssFeed } from '@/utils/rss';
 import { getFeedById } from '@/utils/feedConfig';
 import { scrapeColombiaOne } from '@/utils/articleProcessors/colombiaOneScraper';
 
+export const dynamic = 'force-dynamic'; // Ensure the route is always dynamic
+
 export async function GET(request: NextRequest) {
   // Extract ID from the URL path
   const id = request.nextUrl.pathname.split('/').pop();
