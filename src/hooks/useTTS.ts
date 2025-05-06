@@ -40,7 +40,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
   const [estimatedTotalParts, setEstimatedTotalParts] = useState<number>(0);
 
   // Ref to store the previous ttsAudioUrls for cleanup in useCallback
-  const prevTtsAudioUrlsRef = useRef<Map<number, string>>();
+  const prevTtsAudioUrlsRef = useRef<Map<number, string> | null>(null);
   useEffect(() => {
     // Keep the ref updated with the latest ttsAudioUrls
     prevTtsAudioUrlsRef.current = ttsAudioUrls;
