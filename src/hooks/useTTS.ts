@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, RefObject } from 'react';
+import { useState, useCallback, useEffect, RefObject, useRef } from 'react';
 
 // Types for state
 export interface TTSAudioMetadata {
@@ -13,6 +13,7 @@ export interface TTSAudioMetadata {
 // Hook Props
 interface UseTTSProps {
   articleContentRef: RefObject<HTMLDivElement | null>; // Allow null initially
+  articleIdentifier: string | undefined; // Add new prop
 }
 
 // Hook Return Type
@@ -28,24 +29,73 @@ interface UseTTSReturn {
   estimatedTotalParts: number; // Return the estimated total parts
 }
 
-export const useTTS = ({ articleContentRef }: UseTTSProps): UseTTSReturn => {
+export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): UseTTSReturn => {
   const [isTTSLoading, setIsTTSLoading] = useState<boolean>(false);
   const [loadingChunkIndex, setLoadingChunkIndex] = useState<number | null>(null);
   const [ttsAudioUrls, setTtsAudioUrls] = useState<Map<number, string>>(new Map());
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsAudioMetadatas, setTtsAudioMetadatas] = useState<Map<number, TTSAudioMetadata | null>>(new Map());
   const [highestGeneratedChunkIndex, setHighestGeneratedChunkIndex] = useState<number>(-1);
-  const [ttsLastElementProcessedIndices, setTtsLastElementProcessedIndices] = useState<Map<number, number>>(new Map()); // Store last index per starting chunk index
-  const [estimatedTotalParts, setEstimatedTotalParts] = useState<number>(1);
+  const [ttsLastElementProcessedIndices, setTtsLastElementProcessedIndices] = useState<Map<number, number>>(new Map());
+  const [estimatedTotalParts, setEstimatedTotalParts] = useState<number>(0);
 
-  // Calculate estimated total parts based on article content
+  // Ref to store the previous ttsAudioUrls for cleanup in useCallback
+  const prevTtsAudioUrlsRef = useRef<Map<number, string>>();
   useEffect(() => {
+    // Keep the ref updated with the latest ttsAudioUrls
+    prevTtsAudioUrlsRef.current = ttsAudioUrls;
+  }); // No dependency array, runs after every render to capture the latest ttsAudioUrls
+
+  const fullResetTTS = useCallback(() => {
+    console.log("[useTTS] Full reset triggered.");
+    
+    // Revoke old URLs using the ref to the previous map
+    if (prevTtsAudioUrlsRef.current) {
+      prevTtsAudioUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    }
+
+    setIsTTSLoading(false);
+    setLoadingChunkIndex(null);
+    setTtsAudioUrls(new Map()); // This will cause a re-render, but fullResetTTS itself is stable
+    setTtsError(null);
+    setTtsAudioMetadatas(new Map());
+    setHighestGeneratedChunkIndex(-1);
+    setTtsLastElementProcessedIndices(new Map());
+    setEstimatedTotalParts(0); // Reset to 0
+  }, []); // Empty dependency array makes fullResetTTS stable
+
+  // Effect to trigger full reset when articleIdentifier changes
+  useEffect(() => {
+    if (articleIdentifier) { // Only reset if we have a new identifier
+      console.log(`[useTTS] Article identifier changed to: ${articleIdentifier}. Triggering full reset.`);
+      fullResetTTS();
+    } else {
+      // If articleIdentifier becomes null/undefined (e.g. no article selected), also reset.
+      console.log("[useTTS] No article identifier. Triggering full reset.");
+      fullResetTTS();
+    }
+  }, [articleIdentifier, fullResetTTS]);
+
+  // Effect to calculate estimated total parts
+  useEffect(() => {
+    // Track whether this effect was cleaned up
+    let effectActive = true;
+
     const calculateEstimatedParts = () => {
       const contentContainer = articleContentRef.current;
-      if (!contentContainer) return 1;
+      if (!contentContainer || !articleIdentifier) { // Also check for articleIdentifier
+        console.log(`[useTTS calculateParts Func] Null contentContainer or no articleIdentifier ('${articleIdentifier}'). Returning 0.`);
+        return 0;
+      }
+
+      // Ensure the content for the current article is actually in the DOM
+      if (contentContainer.children.length === 0 && contentContainer.textContent === '') {
+        console.log(`[useTTS calculateParts Func] contentContainer for ID '${articleIdentifier}' is empty (no children, no textContent). Returning 0.`);
+        return 0;
+      }
+      console.log(`[useTTS calculateParts Func] contentContainer for ID '${articleIdentifier}' has children: ${contentContainer.children.length}, textContent length: ${contentContainer.textContent?.length}`);
 
       const allTextElements = Array.from(contentContainer.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6'));
-      // Filter out elements we normally skip
       const validElements = allTextElements.filter(element => {
         const el = element as HTMLElement;
         return !(
@@ -58,45 +108,85 @@ export const useTTS = ({ articleContentRef }: UseTTSProps): UseTTSReturn => {
         );
       });
 
-      // Count total words
       const totalWords = validElements.reduce((count, element) => {
         const text = (element as HTMLElement).textContent?.trim() || '';
-        return count + text.split(/\s+/).length;
+        return count + text.split(/\s+/).filter(Boolean).length; // filter(Boolean) to remove empty strings
       }, 0);
 
-      // Estimate parts based on target words per chunk (300)
       const targetWordsPerChunk = 300;
-      const estimatedParts = Math.max(1, Math.ceil(totalWords / targetWordsPerChunk));
+      // If totalWords is 0, parts should be 0. Otherwise, at least 1.
+      const calculatedParts = totalWords > 0 ? Math.max(1, Math.ceil(totalWords / targetWordsPerChunk)) : 0;
       
-      console.log(`[useTTS] Estimated ${estimatedParts} parts from ${totalWords} words`);
-      return estimatedParts;
+      console.log(`[useTTS calculateParts] Estimated ${calculatedParts} parts from ${totalWords} words for ID: ${articleIdentifier}`);
+      return calculatedParts;
     };
 
-    setEstimatedTotalParts(calculateEstimatedParts());
-    // Reset TTS state if article content changes significantly (e.g., language switch)
-    resetTTS(); 
+    // This function attempts to calculate parts, with retries if content isn't ready
+    const attemptCalculation = (attempt = 1, maxAttempts = 10, initialDelay = 250) => {
+      if (!effectActive) return; // Prevent execution if effect was cleaned up
 
-  }, [articleContentRef]); // Re-calculate when ref changes
+      console.log(`[useTTS calculateParts Attempt] Try #${attempt} for ID: ${articleIdentifier}. Ref exists: ${!!articleContentRef.current}`);
+      
+      if (!articleContentRef.current) {
+        // No ref yet - if we have attempts left, schedule another try with exponential backoff
+        if (attempt < maxAttempts) {
+          const nextDelay = Math.min(initialDelay * Math.pow(1.5, attempt - 1), 2000); // Cap at 2 seconds
+          console.log(`[useTTS calculateParts Attempt] No ref yet. Retrying in ${nextDelay}ms. (${attempt}/${maxAttempts})`);
+          
+          const timerId = setTimeout(() => {
+            if (effectActive) {
+              attemptCalculation(attempt + 1, maxAttempts, initialDelay);
+            }
+          }, nextDelay);
+          
+          return () => {
+            clearTimeout(timerId);
+          };
+        } else {
+          // Exhausted retries, still no ref
+          console.log(`[useTTS calculateParts Attempt] Giving up after ${maxAttempts} attempts. No ref available.`);
+          setEstimatedTotalParts(0);
+          return;
+        }
+      }
+      
+      // We have a ref, attempt calculation
+      const parts = calculateEstimatedParts();
+      
+      // If parts is 0 but we have a ref and not at max attempts, maybe content isn't loaded yet
+      if (parts === 0 && attempt < maxAttempts && articleContentRef.current) {
+        const nextDelay = Math.min(initialDelay * Math.pow(1.2, attempt - 1), 1000); // Slower backoff for content
+        console.log(`[useTTS calculateParts Attempt] Got 0 parts but have ref. Retrying in ${nextDelay}ms. (${attempt}/${maxAttempts})`);
+        
+        const timerId = setTimeout(() => {
+          if (effectActive) {
+            attemptCalculation(attempt + 1, maxAttempts, initialDelay);
+          }
+        }, nextDelay);
+        
+        return () => {
+          clearTimeout(timerId);
+        };
+      } else {
+        // Either we got parts > 0, or we're out of attempts
+        setEstimatedTotalParts(parts);
+      }
+    };
 
-  const resetTTS = useCallback(() => {
-    // Revoke old URLs
-    ttsAudioUrls.forEach(url => URL.revokeObjectURL(url));
-
-    setIsTTSLoading(false);
-    setLoadingChunkIndex(null);
-    setTtsAudioUrls(new Map());
-    setTtsError(null);
-    setTtsAudioMetadatas(new Map());
-    setHighestGeneratedChunkIndex(-1);
-    setTtsLastElementProcessedIndices(new Map());
-    // Keep estimatedTotalParts as it depends on content ref
-    console.log("[useTTS] Reset TTS state.");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // REMOVED ttsAudioUrls dependency
-
-  const isGeneratingChunk = useCallback((chunkIndex: number): boolean => {
-    return isTTSLoading && loadingChunkIndex === chunkIndex;
-  }, [isTTSLoading, loadingChunkIndex]);
+    if (articleIdentifier) {
+        console.log(`[useTTS calculateParts Effect] Triggered for ID: ${articleIdentifier}. Starting calculation attempts.`);
+        const cleanup = attemptCalculation();
+        
+        return () => {
+          effectActive = false;
+          if (cleanup) cleanup();
+        };
+    } else {
+        // If no article identifier, ensure parts are 0
+        console.log(`[useTTS calculateParts Effect] No article identifier. Setting 0 parts.`);
+        setEstimatedTotalParts(0);
+    }
+  }, [articleIdentifier, articleContentRef]); // articleContentRef is stable, effect runs on articleIdentifier change.
 
   const generateTTSChunk = useCallback(async (
     chunkIndex: number, 
@@ -281,6 +371,10 @@ export const useTTS = ({ articleContentRef }: UseTTSProps): UseTTSReturn => {
       loadingChunkIndex // Dependency to check which chunk is loading
   ]); // Dependencies
 
+  const isGeneratingChunk = useCallback((chunkIndex: number): boolean => {
+    return isTTSLoading && loadingChunkIndex === chunkIndex;
+  }, [isTTSLoading, loadingChunkIndex]);
+
   return {
     isTTSLoading, // General loading state
     isGeneratingChunk, // Specific chunk loading state
@@ -289,7 +383,7 @@ export const useTTS = ({ articleContentRef }: UseTTSProps): UseTTSReturn => {
     ttsAudioMetadatas,
     highestGeneratedChunkIndex,
     generateTTSChunk, 
-    resetTTS,
+    resetTTS: fullResetTTS,
     estimatedTotalParts
   };
 }; 
