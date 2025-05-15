@@ -51,12 +51,17 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   const [isPaulGrahamArticle, setIsPaulGrahamArticle] = useState<boolean>(false);
   const [authorImage, setAuthorImage] = useState<string | null>(null);
   const [initialProcessedContent, setInitialProcessedContent] = useState<string>('');
+  const [contentVersion, setContentVersion] = useState(0);
   const articleContentRef = useRef<HTMLDivElement>(null);
   const supabase = useSupabaseClient();
 
   // --- Custom Hooks ---
   const wordPopupHook = useWordPopup();
-  const ttsHook = useTTS({ articleContentRef, articleIdentifier: originalUrl });
+  const ttsHook = useTTS({ 
+    articleContentRef, 
+    articleIdentifier: originalUrl, 
+    contentVersionSignal: contentVersion
+  });
   const translationHook = useTranslation({ 
     article, 
     originalUrl, 
@@ -75,7 +80,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     ttsAudioMetadatas,
     highestGeneratedChunkIndex,
     generateTTSChunk: generateTTSChunkFromHook,
-    resetTTS, 
+    resetAudioAndMetadata,
     estimatedTotalParts 
   } = ttsHook;
   const { 
@@ -128,13 +133,25 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     return () => {
       if (!article) setInitialProcessedContent('');
     }
-  }, [article, originalUrl, thumbnailUrl, finalStreamedContent, authorImage, publishDate, setAuthorImage]);
+  }, [article, originalUrl, thumbnailUrl, finalStreamedContent, authorImage, publishDate, setAuthorImage, initialProcessedContent]);
   
   useEffect(() => {
-    if (isStreaming) {
-      resetTTS();
+    if (initialProcessedContent && !finalStreamedContent) {
+      setContentVersion(1);
     }
-  }, [isStreaming, resetTTS]);
+  }, [initialProcessedContent, finalStreamedContent]);
+
+  useEffect(() => {
+    if (finalStreamedContent && !isStreaming) {
+      setContentVersion(2);
+    }
+  }, [finalStreamedContent, isStreaming]);
+
+  useEffect(() => {
+    if (isStreaming) {
+      if (resetAudioAndMetadata) resetAudioAndMetadata();
+    }
+  }, [isStreaming, resetAudioAndMetadata]);
 
   // --- Memoization --- 
   const finalEnhancedContentMemo = useEnhancedContent(finalStreamedContent);

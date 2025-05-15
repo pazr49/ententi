@@ -14,6 +14,7 @@ export interface TTSAudioMetadata {
 interface UseTTSProps {
   articleContentRef: RefObject<HTMLDivElement | null>; // Allow null initially
   articleIdentifier: string | undefined; // Add new prop
+  contentVersionSignal: number; // New prop
 }
 
 // Hook Return Type
@@ -26,10 +27,11 @@ interface UseTTSReturn {
   highestGeneratedChunkIndex: number; // Highest index successfully generated
   generateTTSChunk: (chunkIndex: number, isOriginal: boolean, sourceRegion?: string, readingLevel?: string, streamedLang?: string) => Promise<void>;
   resetTTS: () => void;
+  resetAudioAndMetadata: () => void;
   estimatedTotalParts: number; // Return the estimated total parts
 }
 
-export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): UseTTSReturn => {
+export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSignal }: UseTTSProps): UseTTSReturn => {
   const [isTTSLoading, setIsTTSLoading] = useState<boolean>(false);
   const [loadingChunkIndex, setLoadingChunkIndex] = useState<number | null>(null);
   const [ttsAudioUrls, setTtsAudioUrls] = useState<Map<number, string>>(new Map());
@@ -38,7 +40,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
   const [highestGeneratedChunkIndex, setHighestGeneratedChunkIndex] = useState<number>(-1);
   const [ttsLastElementProcessedIndices, setTtsLastElementProcessedIndices] = useState<Map<number, number>>(new Map());
   const [estimatedTotalParts, setEstimatedTotalParts] = useState<number>(0);
-  const [recalcTrigger, setRecalcTrigger] = useState(0);
 
   // Ref to store the previous ttsAudioUrls for cleanup in useCallback
   const prevTtsAudioUrlsRef = useRef<Map<number, string> | null>(null);
@@ -63,8 +64,21 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
     setHighestGeneratedChunkIndex(-1);
     setTtsLastElementProcessedIndices(new Map());
     setEstimatedTotalParts(0); // Reset to 0
-    setRecalcTrigger(prev => prev + 1);
   }, []); // Empty dependency array makes fullResetTTS stable
+
+  // New function to reset only audio and metadata
+  const resetAudioAndMetadata = useCallback(() => {
+    console.log("[useTTS] Resetting audio and metadata only.");
+    if (prevTtsAudioUrlsRef.current) {
+      prevTtsAudioUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    }
+    setTtsAudioUrls(new Map());
+    setTtsAudioMetadatas(new Map());
+    setHighestGeneratedChunkIndex(-1);
+    setTtsLastElementProcessedIndices(new Map());
+    // Note: estimatedTotalParts is NOT reset here
+    setTtsError(null); // Also clear any existing TTS error
+  }, []); // Depends on nothing, so it's stable
 
   // Effect to trigger full reset when articleIdentifier changes
   useEffect(() => {
@@ -176,7 +190,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
     };
 
     if (articleIdentifier) {
-        console.log(`[useTTS calculateParts Effect] Triggered for ID: ${articleIdentifier}. Starting calculation attempts.`);
+        console.log(`[useTTS calculateParts Effect] Triggered for ID: ${articleIdentifier}, Version: ${contentVersionSignal}. Starting calculation attempts.`);
         const cleanup = attemptCalculation();
         
         return () => {
@@ -185,10 +199,10 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
         };
     } else {
         // If no article identifier, ensure parts are 0
-        console.log(`[useTTS calculateParts Effect] No article identifier. Setting 0 parts.`);
+        console.log(`[useTTS calculateParts Effect] No article identifier. Setting 0 parts. Version: ${contentVersionSignal}`);
         setEstimatedTotalParts(0);
     }
-  }, [articleIdentifier, articleContentRef, recalcTrigger]); // <-- Add recalcTrigger to dependencies
+  }, [articleIdentifier, articleContentRef, contentVersionSignal]); // articleContentRef is stable, effect runs on articleIdentifier change.
 
   const generateTTSChunk = useCallback(async (
     chunkIndex: number, 
@@ -386,6 +400,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
     highestGeneratedChunkIndex,
     generateTTSChunk, 
     resetTTS: fullResetTTS,
+    resetAudioAndMetadata,
     estimatedTotalParts
   };
 }; 

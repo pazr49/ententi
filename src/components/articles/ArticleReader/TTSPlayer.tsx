@@ -78,12 +78,6 @@ export default function TTSPlayer({
     // Dependency: trigger effect when the selected index changes OR the URL for that index appears/changes in the map
   }, [selectedPartIndex, ttsAudioUrls]);
 
-  // If not streaming and no parts are estimated (or genuinely 0 parts for the content),
-  // don't render the player. If streaming, we want to render a shell.
-  if (estimatedTotalParts <= 0 && !isStreaming) {
-    return null; 
-  }
-
   const totalParts = Math.max(estimatedTotalParts, highestGeneratedChunkIndex + 1);
   const currentAudioUrl = ttsAudioUrls.get(selectedPartIndex);
   const currentMetadata = ttsAudioMetadatas.get(selectedPartIndex);
@@ -95,6 +89,12 @@ export default function TTSPlayer({
 
   // Determine overall disabled state for generation actions
   const generationDisabled = isListenButtonDisabled || isStreaming || isLoadingThisChunk;
+
+  // Show nothing or a minimal state if no parts are estimated yet?
+  // Or rely on parent to not render this component until estimation is done.
+  if (estimatedTotalParts <= 0) {
+    return null; // Or a placeholder
+  }
 
   return (
     <div className="my-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm transition-all duration-200">
@@ -128,43 +128,37 @@ export default function TTSPlayer({
       {/* Pills with separate scroll container and visible overflow */}
       <div className="relative mb-2 px-3">
         <div className="flex space-x-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scroll-smooth">
-          {isStreaming && totalParts === 0 ? (
-            <div className="w-full text-center text-sm text-gray-500 dark:text-gray-400 py-2 px-1">
-              Preparing audio parts for translated content...
-            </div>
-          ) : (
-            Array.from({ length: totalParts }, (_, i) => {
-              const partAudioExists = ttsAudioUrls.has(i);
-              const isSelectable = !isGeneratingChunk(i);
-              
-              return (
-                <button
-                  key={`part-${i}`}
-                  onClick={() => handlePartSelection(i)}
-                  disabled={!isSelectable}
-                  title={!isSelectable ? `Generating Part ${i + 1}...` : `Select Part ${i + 1}`}
-                  className={`flex-none px-4 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
-                    i === selectedPartIndex
-                      ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 border border-indigo-500 dark:border-indigo-600' 
-                      : partAudioExists
-                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
-                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-700/50 border border-gray-200 dark:border-gray-800'
-                  } ${!isSelectable ? 'cursor-not-allowed opacity-70' : ''}`}
-                >
-                  Part {i + 1}
-                  {isGeneratingChunk(i) && (
-                    <svg className="animate-spin h-3 w-3 ml-1.5 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  )}
-                  {!partAudioExists && i > highestGeneratedChunkIndex && i !== selectedPartIndex && !isGeneratingChunk(i) && (
-                    <span className="ml-1 opacity-60">○</span>
-                  )}
-                </button>
-              );
-            })
-          )}
+          {Array.from({ length: totalParts }, (_, i) => {
+            const partAudioExists = ttsAudioUrls.has(i);
+            const isSelectable = !isGeneratingChunk(i);
+            
+            return (
+              <button
+                key={`part-${i}`}
+                onClick={() => handlePartSelection(i)}
+                disabled={!isSelectable}
+                title={!isSelectable ? `Generating Part ${i + 1}...` : `Select Part ${i + 1}`}
+                className={`flex-none px-4 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+                  i === selectedPartIndex
+                    ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 border border-indigo-500 dark:border-indigo-600' 
+                    : partAudioExists
+                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-700/50 border border-gray-200 dark:border-gray-800'
+                } ${!isSelectable ? 'cursor-not-allowed opacity-70' : ''}`}
+              >
+                Part {i + 1}
+                {isGeneratingChunk(i) && (
+                  <svg className="animate-spin h-3 w-3 ml-1.5 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {!partAudioExists && i > highestGeneratedChunkIndex && i !== selectedPartIndex && !isGeneratingChunk(i) && (
+                  <span className="ml-1 opacity-60">○</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
         
