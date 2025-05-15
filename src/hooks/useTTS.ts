@@ -38,6 +38,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
   const [highestGeneratedChunkIndex, setHighestGeneratedChunkIndex] = useState<number>(-1);
   const [ttsLastElementProcessedIndices, setTtsLastElementProcessedIndices] = useState<Map<number, number>>(new Map());
   const [estimatedTotalParts, setEstimatedTotalParts] = useState<number>(0);
+  const [recalcTrigger, setRecalcTrigger] = useState(0);
 
   // Ref to store the previous ttsAudioUrls for cleanup in useCallback
   const prevTtsAudioUrlsRef = useRef<Map<number, string> | null>(null);
@@ -62,6 +63,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
     setHighestGeneratedChunkIndex(-1);
     setTtsLastElementProcessedIndices(new Map());
     setEstimatedTotalParts(0); // Reset to 0
+    setRecalcTrigger(prev => prev + 1);
   }, []); // Empty dependency array makes fullResetTTS stable
 
   // Effect to trigger full reset when articleIdentifier changes
@@ -186,7 +188,7 @@ export const useTTS = ({ articleContentRef, articleIdentifier }: UseTTSProps): U
         console.log(`[useTTS calculateParts Effect] No article identifier. Setting 0 parts.`);
         setEstimatedTotalParts(0);
     }
-  }, [articleIdentifier, articleContentRef]); // articleContentRef is stable, effect runs on articleIdentifier change.
+  }, [articleIdentifier, articleContentRef, recalcTrigger]); // <-- Add recalcTrigger to dependencies
 
   const generateTTSChunk = useCallback(async (
     chunkIndex: number, 

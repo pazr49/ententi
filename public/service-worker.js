@@ -99,11 +99,14 @@ self.addEventListener('fetch', (event) => {
           // Clone the response because it can only be consumed once
           const responseToCache = networkResponse.clone();
 
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              // console.log('Caching new resource:', event.request.url);
-              cache.put(event.request, responseToCache);
-            });
+          // Only cache GET requests
+          if (event.request.method === 'GET') {
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                // console.log('Caching new resource:', event.request.url);
+                cache.put(event.request, responseToCache);
+              });
+          }
 
           return networkResponse;
         }).catch(error => {
