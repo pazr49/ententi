@@ -31,6 +31,17 @@ interface UseTTSReturn {
   estimatedTotalParts: number; // Return the estimated total parts
 }
 
+// Helper function: Base64 to ArrayBuffer
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSignal }: UseTTSProps): UseTTSReturn => {
   const [isTTSLoading, setIsTTSLoading] = useState<boolean>(false);
   const [loadingChunkIndex, setLoadingChunkIndex] = useState<number | null>(null);
@@ -139,14 +150,13 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
 
     // This function attempts to calculate parts, with retries if content isn't ready
     const attemptCalculation = (attempt = 1, maxAttempts = 10, initialDelay = 250) => {
-      if (!effectActive) return; // Prevent execution if effect was cleaned up
+      if (!effectActive) return;
 
       console.log(`[useTTS calculateParts Attempt] Try #${attempt} for ID: ${articleIdentifier}. Ref exists: ${!!articleContentRef.current}`);
       
       if (!articleContentRef.current) {
-        // No ref yet - if we have attempts left, schedule another try with exponential backoff
         if (attempt < maxAttempts) {
-          const nextDelay = Math.min(initialDelay * Math.pow(1.5, attempt - 1), 2000); // Cap at 2 seconds
+          const nextDelay = Math.min(initialDelay * Math.pow(1.5, attempt - 1), 2000);
           console.log(`[useTTS calculateParts Attempt] No ref yet. Retrying in ${nextDelay}ms. (${attempt}/${maxAttempts})`);
           
           const timerId = setTimeout(() => {
@@ -159,19 +169,16 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
             clearTimeout(timerId);
           };
         } else {
-          // Exhausted retries, still no ref
           console.log(`[useTTS calculateParts Attempt] Giving up after ${maxAttempts} attempts. No ref available.`);
           setEstimatedTotalParts(0);
           return;
         }
       }
       
-      // We have a ref, attempt calculation
       const parts = calculateEstimatedParts();
       
-      // If parts is 0 but we have a ref and not at max attempts, maybe content isn't loaded yet
       if (parts === 0 && attempt < maxAttempts && articleContentRef.current) {
-        const nextDelay = Math.min(initialDelay * Math.pow(1.2, attempt - 1), 1000); // Slower backoff for content
+        const nextDelay = Math.min(initialDelay * Math.pow(1.2, attempt - 1), 1000);
         console.log(`[useTTS calculateParts Attempt] Got 0 parts but have ref. Retrying in ${nextDelay}ms. (${attempt}/${maxAttempts})`);
         
         const timerId = setTimeout(() => {
@@ -184,7 +191,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
           clearTimeout(timerId);
         };
       } else {
-        // Either we got parts > 0, or we're out of attempts
         setEstimatedTotalParts(parts);
       }
     };
@@ -198,11 +204,10 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
           if (cleanup) cleanup();
         };
     } else {
-        // If no article identifier, ensure parts are 0
         console.log(`[useTTS calculateParts Effect] No article identifier. Setting 0 parts. Version: ${contentVersionSignal}`);
         setEstimatedTotalParts(0);
     }
-  }, [articleIdentifier, articleContentRef, contentVersionSignal]); // articleContentRef is stable, effect runs on articleIdentifier change.
+  }, [articleIdentifier, articleContentRef, contentVersionSignal]);
 
   const generateTTSChunk = useCallback(async (
     chunkIndex: number, 
@@ -214,7 +219,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
     speed: string = 'medium'
   ) => {
     console.log(`[useTTS internal raw voice param] Received voice: ${voice}, speed: ${speed}`);
-    // Prevent generating if already generated or currently loading this chunk
     if (ttsAudioUrls.has(chunkIndex) || (isTTSLoading && loadingChunkIndex === chunkIndex)) {
       console.log(`[useTTS] Skipping generation for chunk ${chunkIndex} (already exists or loading).`);
       return;
@@ -222,11 +226,9 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
 
     console.log(`[useTTS] generateTTSChunk called for index: ${chunkIndex}`);
     
-    // Reset *specific* chunk state before generation
     setIsTTSLoading(true);
     setLoadingChunkIndex(chunkIndex);
-    setTtsError(null); // Clear general error
-    // Remove previous URL/metadata for this specific chunk if regenerating
+    setTtsError(null);
     setTtsAudioUrls(prev => {
         const newMap = new Map(prev);
         const oldUrl = newMap.get(chunkIndex);
@@ -240,7 +242,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
         return newMap;
     });
 
-    // --- 1. Determine Source Text Container --- 
     const contentContainer = articleContentRef.current;
     if (!contentContainer) {
         console.error("[useTTS] Content container ref is not available.");
@@ -250,14 +251,12 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
         return;
     }
 
-    // --- 2. Select Text Segment for the Chunk --- 
     const allTextElements = Array.from(contentContainer.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6'));
     const textParts: string[] = [];
     let currentWordCount = 0;
     const targetWordCount = 300; 
     const maxWordCount = 500;   
     
-    // Determine start index based on the *previous* chunk's end index
     const previousChunkIndex = chunkIndex - 1;
     const lastProcessedIndexForPrevious = ttsLastElementProcessedIndices.get(previousChunkIndex) ?? -1;
     const startElementIndex = chunkIndex === 0 ? 0 : lastProcessedIndexForPrevious + 1;
@@ -269,7 +268,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
 
     for (let i = startElementIndex; i < allTextElements.length; i++) {
       const element = allTextElements[i] as HTMLElement;
-      // Exclusion logic
       if (element.closest('figcaption') || 
           element.closest('.video-placeholder') || 
           element.closest('.image-source-overlay') ||
@@ -300,15 +298,12 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
         return;
     } else if (endElementIndex === -1 && startElementIndex >= allTextElements.length) {
         console.log(`[useTTS] Start index for chunk ${chunkIndex} is beyond the last element. No more chunks.`);
-        // This case indicates we've likely processed everything
         setIsTTSLoading(false);
         setLoadingChunkIndex(null);
         return;
     }
 
-    // Store the end index for *this* chunk index
     setTtsLastElementProcessedIndices(prev => new Map(prev).set(chunkIndex, endElementIndex));
-
     reachedEndOfArticle = (endElementIndex === allTextElements.length - 1);
     const sourceText = textParts.join(' \n\n '); 
 
@@ -322,7 +317,6 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
     
     console.log(`[useTTS] Chunk ${chunkIndex} text selected (approx ${currentWordCount} words). Ends at element index ${endElementIndex}. Reached end: ${reachedEndOfArticle}.`);
 
-    // --- 3. API Call --- 
     try {
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       if (!anonKey) throw new Error('Client configuration error: Missing anon key.');
@@ -357,31 +351,55 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
         throw new Error(errorBody);
       }
 
-      const audioBlob = await response.blob();
-      console.log(`[useTTS] Received blob for chunk ${chunkIndex} (Size: ${audioBlob.size}, Type: ${audioBlob.type})`);
-      if (audioBlob.size === 0) throw new Error("Received empty audio blob.");
+      const jsonResponse = await response.json();
       
-      // --- 4. Update State on Success --- 
-      const audioUrl = URL.createObjectURL(audioBlob);
+      if (!jsonResponse || !jsonResponse.audioChunks || !Array.isArray(jsonResponse.audioChunks) || jsonResponse.audioChunks.length === 0) {
+        console.error("[useTTS] Invalid audioChunks received:", jsonResponse);
+        throw new Error("Received no valid audio chunks from the server.");
+      }
+
+      const audioBlobs: Blob[] = jsonResponse.audioChunks.map((base64Chunk: string): Blob | null => {
+        if (typeof base64Chunk !== 'string' || base64Chunk.length === 0) {
+            console.warn("[useTTS] Encountered invalid base64 chunk (not a string or empty). Skipping.");
+            return null; 
+        }
+        try {
+            const arrayBuffer = base64ToArrayBuffer(base64Chunk);
+            return new Blob([arrayBuffer], { type: 'audio/mpeg' });
+        } catch (e) {
+            console.error("[useTTS] Error decoding base64 chunk:", e);
+            return null; 
+        }
+      }).filter((blobOrNull: Blob | null): blobOrNull is Blob => blobOrNull !== null);
+
+      if (audioBlobs.length === 0) {
+        console.error("[useTTS] No valid audio blobs could be created from server response.");
+        throw new Error("Failed to process audio data from server.");
+      }
+      
+      const combinedBlob = new Blob(audioBlobs, { type: 'audio/mpeg' });
+      
+      console.log(`[useTTS] Received ${jsonResponse.audioChunks.length} audio pieces, combined into blob for chunk ${chunkIndex} (Size: ${combinedBlob.size}, Type: ${combinedBlob.type})`);
+      if (combinedBlob.size === 0) throw new Error("Combined audio blob is empty.");
+      
+      const audioUrl = URL.createObjectURL(combinedBlob);
       setTtsAudioUrls(prev => new Map(prev).set(chunkIndex, audioUrl));
       setHighestGeneratedChunkIndex(prev => Math.max(prev, chunkIndex));
       
-      // Set metadata
       const metadataBase = { region: sourceRegion, readingLevel: readingLevel };
       const newMetadata: TTSAudioMetadata = isOriginalContent 
           ? { language: 'Original' } 
           : { language: streamedLang || 'Translated', ...metadataBase };
       setTtsAudioMetadatas(prev => new Map(prev).set(chunkIndex, newMetadata));
       
-      setTtsError(null); // Clear error on success
+      setTtsError(null);
       
       console.log(`[useTTS] Audio URL created for chunk ${chunkIndex}. Highest generated: ${Math.max(highestGeneratedChunkIndex, chunkIndex)}`);
 
     } catch (err) { 
       console.error(`[useTTS] Error generating TTS for chunk ${chunkIndex}:`, err);
       const message = (err instanceof Error) ? err.message : 'An unknown error occurred.';
-      setTtsError(message); // Set error for the specific chunk attempt?
-      // Don't reset highestGeneratedChunkIndex on error
+      setTtsError(message);
     } finally {
       setIsTTSLoading(false);
       setLoadingChunkIndex(null);
@@ -389,18 +407,18 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
   }, [
       articleContentRef, 
       ttsLastElementProcessedIndices, 
-      ttsAudioUrls, // Dependency to check if already generated
-      isTTSLoading, // Dependency to check if currently loading
-      loadingChunkIndex // Dependency to check which chunk is loading
-  ]); // Dependencies
+      ttsAudioUrls,
+      isTTSLoading,
+      loadingChunkIndex
+  ]);
 
   const isGeneratingChunk = useCallback((chunkIndex: number): boolean => {
     return isTTSLoading && loadingChunkIndex === chunkIndex;
   }, [isTTSLoading, loadingChunkIndex]);
 
   return {
-    isTTSLoading, // General loading state
-    isGeneratingChunk, // Specific chunk loading state
+    isTTSLoading,
+    isGeneratingChunk,
     ttsAudioUrls,
     ttsError,
     ttsAudioMetadatas,
