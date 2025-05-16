@@ -164,14 +164,26 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
   };
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
-  const callGenerateTTS = async (index: number): Promise<void> => {
-    const isOriginal = !finalStreamedContent;
+  const callGenerateTTS = async (
+    index: number,
+    // These parameters are sent by TTSPlayer, we need to declare them
+    // even if ArticleReader re-determines/overrides some like isOriginal.
+    _isOriginalFromPlayer?: boolean, // We'll use ArticleReader's logic for isOriginal
+    _sourceRegionFromPlayer?: string,
+    _readingLevelFromPlayer?: string,
+    _streamedLangFromPlayer?: string,
+    voiceToUse?: string, // This is the crucial voice from TTSPlayer
+    speedToUse?: string // Added speedToUse from TTSPlayer
+  ): Promise<void> => {
+    const isOriginal = !finalStreamedContent; // ArticleReader determines if content is original or translated
     await generateTTSChunkFromHook(
-      index, 
-      isOriginal, 
+      index,
+      isOriginal, // Use ArticleReader's determination
       isOriginal ? undefined : currentTranslationRegion,
       isOriginal ? undefined : currentTranslationLevel,
-      isOriginal ? undefined : streamedLang
+      isOriginal ? undefined : streamedLang,
+      voiceToUse, // Pass the voice from TTSPlayer through
+      speedToUse // Pass the speed from TTSPlayer through
     );
   };
 

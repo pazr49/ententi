@@ -42,10 +42,29 @@ serve(async (req) => {
     // 2. Parse request body (UPDATED to include region)
     let text = '';
     let region: string | undefined = undefined; // Variable for region code
+    let voice: string = 'coral'; // Variable for voice, default to 'coral'
+    let speed: string = 'medium'; // Variable for speed, default to 'medium'
+
     try {
       const body = await req.json();
+      console.log("[generate-tts] Received raw body.voice:", body.voice); // Debug log for raw voice
       text = body.text;
       region = body.region; // Extract optional region code
+      
+      // Extract optional voice, ensuring it's a string if provided
+      if (body.voice && typeof body.voice === 'string') {
+        voice = body.voice;
+      } else if (body.voice) {
+        console.warn("Received invalid 'voice' field, using default 'coral'.");
+      }
+
+      // Extract optional speed, ensuring it's a valid string if provided
+      if (body.speed && typeof body.speed === 'string' && ['slow', 'medium', 'normal'].includes(body.speed)) {
+        speed = body.speed;
+      } else if (body.speed) {
+        console.warn(`Received invalid 'speed' field: ${body.speed}. Using default 'medium'.`);
+      }
+
       if (!text || typeof text !== 'string') {
         throw new Error("Missing or invalid 'text' field in request body");
       }
@@ -72,23 +91,37 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Received text for TTS: "${text.substring(0, 50)}..."${region ? ` (Region: ${region})` : ''}`);
+    console.log(`Received text for TTS: "${text.substring(0, 50)}..."${region ? ` (Region: ${region})` : ''} (Voice: ${voice}, Speed: ${speed})`);
 
     // --- Construct Instructions --- 
-    let instructions = "Speak clearly and very slowly, like a newsreader explaining something to a beginner language learner.";
+    let baseInstruction = "Speak clearly";
+    switch (speed) {
+      case 'slow':
+        baseInstruction += ", very slowly, at a pace suitable for a beginner language learner trying to follow along.";
+        break;
+      case 'normal':
+        baseInstruction += " and at a normal conversational pace.";
+        break;
+      case 'medium':
+      default:
+        baseInstruction += " and at a moderate, natural pace, like a standard newsreader.";
+        break;
+    }
+
+    let instructions = baseInstruction;
     if (region && regionAccentMap[region]) {
         const accentDescription = regionAccentMap[region];
         instructions += ` Use a ${accentDescription} accent.`;
         console.log(`Adding instruction for accent: ${accentDescription}`);
     } else if (region) {
-        console.log(`Region code '${region}' provided but not found in map, using default instructions.`);
+        console.log(`Region code '${region}' provided but not found in map, using default instructions for accent.`);
     }
     // --- End Construct Instructions ---
 
     // 4. Call OpenAI API (UPDATED to include instructions)
     const apiUrl = 'https://api.openai.com/v1/audio/speech';
+    // const model = 'tts-1'; // Cheaper model for testing if needed
     const model = 'gpt-4o-mini-tts'; 
-    const voice = 'nova'; // Example voice
 
     console.log(`Calling OpenAI API (${model}, ${voice}) with instructions: "${instructions}"`);
 

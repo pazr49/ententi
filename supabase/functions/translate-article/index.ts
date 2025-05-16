@@ -429,7 +429,7 @@ serve(async (req: Request) => {
 
       // Initialize Gemini client (remains the same)
     const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using 1.5 Flash as it supports streaming well
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // Using 1.5 Flash as it supports streaming well
 
       // --- Step 1: Translate Title (Non-streaming) ---
       console.log(`Translating title: "${articleContent.title}"`);

@@ -11,7 +11,7 @@ interface TTSPlayerProps {
   ttsError: string | null;
   ttsAudioMetadatas: Map<number, TTSAudioMetadata | null>;
   highestGeneratedChunkIndex: number;
-  generateTTSChunk: (chunkIndex: number) => Promise<void>; // Simplified, parent provides context
+  generateTTSChunk: (chunkIndex: number, isOriginal: boolean, sourceRegion?: string, readingLevel?: string, streamedLang?: string, voice?: string, speed?: string) => Promise<void>; // Updated signature
   estimatedTotalParts: number;
   
   // General component props
@@ -34,6 +34,8 @@ export default function TTSPlayer({
 }: TTSPlayerProps) {
 
   const [selectedPartIndex, setSelectedPartIndex] = useState<number>(initialSelectedPart);
+  const [selectedVoice, setSelectedVoice] = useState<string>('coral'); // 'coral' (female) or 'ballad' (male)
+  const [selectedSpeed, setSelectedSpeed] = useState<string>('medium'); // 'slow', 'medium', 'normal'
   const audioRef = useRef<HTMLAudioElement>(null); // Ref for the audio element
 
   // Effect to automatically play OR stop when the selected part changes
@@ -83,18 +85,37 @@ export default function TTSPlayer({
   const currentMetadata = ttsAudioMetadatas.get(selectedPartIndex);
   const isLoadingThisChunk = isGeneratingChunk(selectedPartIndex);
 
+  // Determine if the selected part can be generated
+  // It can be generated if it's the very next part after the highest generated one,
+  // or if it's part 0 and nothing has been generated yet.
+  const canGenerateSelectedPart = selectedPartIndex === 0 || selectedPartIndex === highestGeneratedChunkIndex + 1;
+
   const handlePartSelection = (partIndex: number) => {
     setSelectedPartIndex(partIndex);
   };
 
   // Determine overall disabled state for generation actions
-  const generationDisabled = isListenButtonDisabled || isStreaming || isLoadingThisChunk;
+  const generationDisabled = isListenButtonDisabled || isStreaming || isLoadingThisChunk || !canGenerateSelectedPart;
+  let generationButtonTitle = `Generate Part ${selectedPartIndex + 1}`;
+  if (isStreaming) {
+    generationButtonTitle = "Cannot generate while translating";
+  } else if (isLoadingThisChunk) {
+    generationButtonTitle = `Generating Part ${selectedPartIndex + 1}...`;
+  } else if (!canGenerateSelectedPart && selectedPartIndex > 0) {
+    generationButtonTitle = `Please generate Part ${selectedPartIndex} first`;
+  }
 
   // Show nothing or a minimal state if no parts are estimated yet?
   // Or rely on parent to not render this component until estimation is done.
   if (estimatedTotalParts <= 0) {
     return null; // Or a placeholder
   }
+
+  const handleGenerateChunk = () => {
+    console.log("[TTSPlayer] Generating chunk with voice:", selectedVoice, "speed:", selectedSpeed);
+    // Assuming translated content for now, pass relevant defaults
+    generateTTSChunk(selectedPartIndex, false, undefined, undefined, undefined, selectedVoice, selectedSpeed);
+  };
 
   return (
     <div className="my-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm transition-all duration-200">
@@ -162,6 +183,43 @@ export default function TTSPlayer({
         </div>
       </div>
         
+      {/* Voice Selection UI - Changed to Dropdown */}
+      <div className="px-3 pb-2 mb-2 border-b border-gray-200 dark:border-gray-700/50">
+        <div className="flex items-center space-x-3">
+          <label htmlFor="tts-voice-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">Voice:</label>
+          <select 
+            id="tts-voice-select"
+            name="tts-voice"
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            className="block w-auto py-1 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
+          >
+            <option value="coral">Female (Coral)</option>
+            <option value="ballad">Male (Ballad)</option>
+            <option value="nova">Female (Nova)</option>
+            <option value="alloy">Male (Alloy)</option>
+            <option value="shimmer">Female (Shimmer)</option>
+            <option value="echo">Male (Echo)</option>
+            <option value="fable">Male (Fable)</option>
+            <option value="onyx">Male (Onyx)</option>
+            {/* Add other voices as needed */}
+          </select>
+
+          <label htmlFor="tts-speed-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-4">Speed:</label>
+          <select 
+            id="tts-speed-select"
+            name="tts-speed"
+            value={selectedSpeed}
+            onChange={(e) => setSelectedSpeed(e.target.value)}
+            className="block w-auto py-1 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
+          >
+            <option value="slow">Slow</option>
+            <option value="medium">Medium</option>
+            <option value="normal">Normal</option>
+          </select>
+        </div>
+      </div>
+
       {/* Audio Player or Generate Button */}
       <div className="px-3 pb-3 min-h-[48px]">
         {/* Always render Audio element, hide if no URL */}
@@ -192,14 +250,14 @@ export default function TTSPlayer({
           // Generate button - show only if not loading and no URL
           <div className="flex justify-center py-1">
             <button 
-              onClick={() => generateTTSChunk(selectedPartIndex)}
+              onClick={handleGenerateChunk}
               disabled={generationDisabled}
               className={`group relative inline-flex items-center justify-center px-4 py-1.5 rounded-lg overflow-hidden transition-all duration-300 ${
                 generationDisabled
                   ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
                   : 'bg-white text-indigo-600 dark:bg-gray-800 dark:text-indigo-300 hover:text-white dark:hover:text-white shadow-sm border border-indigo-200 dark:border-indigo-800/50'
               }`}
-              title={isStreaming ? "Cannot generate while translating" : `Generate Part ${selectedPartIndex + 1}`}
+              title={generationButtonTitle}
             >
               {!generationDisabled && (
                 <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-indigo-600 dark:from-indigo-700 dark:to-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>

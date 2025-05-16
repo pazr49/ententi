@@ -25,7 +25,7 @@ interface UseTTSReturn {
   ttsError: string | null;
   ttsAudioMetadatas: Map<number, TTSAudioMetadata | null>; // Map of chunkIndex to metadata
   highestGeneratedChunkIndex: number; // Highest index successfully generated
-  generateTTSChunk: (chunkIndex: number, isOriginal: boolean, sourceRegion?: string, readingLevel?: string, streamedLang?: string) => Promise<void>;
+  generateTTSChunk: (chunkIndex: number, isOriginal: boolean, sourceRegion?: string, readingLevel?: string, streamedLang?: string, voice?: string, speed?: string) => Promise<void>;
   resetTTS: () => void;
   resetAudioAndMetadata: () => void;
   estimatedTotalParts: number; // Return the estimated total parts
@@ -209,8 +209,11 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
     isOriginalContent: boolean,
     sourceRegion?: string,
     readingLevel?: string,
-    streamedLang?: string
+    streamedLang?: string,
+    voice: string = 'coral',
+    speed: string = 'medium'
   ) => {
+    console.log(`[useTTS internal raw voice param] Received voice: ${voice}, speed: ${speed}`);
     // Prevent generating if already generated or currently loading this chunk
     if (ttsAudioUrls.has(chunkIndex) || (isTTSLoading && loadingChunkIndex === chunkIndex)) {
       console.log(`[useTTS] Skipping generation for chunk ${chunkIndex} (already exists or loading).`);
@@ -325,7 +328,11 @@ export const useTTS = ({ articleContentRef, articleIdentifier, contentVersionSig
       if (!anonKey) throw new Error('Client configuration error: Missing anon key.');
       const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-tts`;
 
-      const payload: { text: string; region?: string } = { text: sourceText }; 
+      const payload: { text: string; region?: string; voice: string; speed: string } = {
+        text: sourceText,
+        voice: voice,
+        speed: speed
+      }; 
       if (sourceRegion) payload.region = sourceRegion;
       console.log("[useTTS] Payload being sent:", payload);
 
