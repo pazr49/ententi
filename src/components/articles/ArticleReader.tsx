@@ -133,7 +133,7 @@ export default function ArticleReader({ article, isLoading = false, originalUrl,
     return () => {
       if (!article) setInitialProcessedContent('');
     }
-  }, [article, originalUrl, thumbnailUrl, finalStreamedContent, authorImage, publishDate, setAuthorImage, initialProcessedContent]);
+  }, [article, originalUrl, thumbnailUrl, finalStreamedContent, authorImage, publishDate, setAuthorImage]);
   
   useEffect(() => {
     if (initialProcessedContent && !finalStreamedContent) {

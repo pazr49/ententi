@@ -35,21 +35,36 @@ function ArticleContent() {
   // Fetch article if it's saved or handle redirect
   useEffect(() => {
     if (isClient && url) {
+      const readerFlag = sessionStorage.getItem('articleReaderView');
+      // Ensure currentArticleUrl from session matches the page's current URL param
+      const cameFromReaderFlow = readerFlag === 'true' && sessionStorage.getItem('currentArticleUrl') === url;
+
+      // If article is already loaded for this specific URL, useArticleFetching's fetchArticle will handle not re-fetching.
+      // We proceed to decide if a new fetch is needed or if a redirect is appropriate.
+
       if (isSaved || !user) {
-        // If the article is saved, or the user is not logged in, fetch the article
+        // Fetch if:
+        // 1. Article is saved
+        // 2. User is not logged in (guest access)
         fetchArticle(url);
-      } else {
-        // For logged in users with unsaved articles, check if we should load the article or redirect
-        const readerFlag = sessionStorage.getItem('articleReaderView');
-        const storedUrl = sessionStorage.getItem('currentArticleUrl');
-        
-        if (!article && (!readerFlag || storedUrl !== url)) {
-          console.log('Article not saved and article not loaded, redirecting to original URL:', url);
+      } else { // User is logged in and article is not saved
+        if (cameFromReaderFlow) {
+          // Logged in, not saved, but came via ArticleCard: fetch it.
+          fetchArticle(url);
+        } else if (!article) { 
+          // Logged in, not saved, didn't come via ArticleCard, and no article currently loaded.
+          // This implies a direct access attempt or that flags weren't set/read correctly.
+          console.log('Article not saved, not loaded, and not via reader flow. Redirecting to original URL:', url);
           window.location.href = url;
         }
+        // If 'article' is loaded, user is logged in, article not saved, and not 'cameFromReaderFlow':
+        // This means they might have loaded it, then navigated away and back, or flags expired.
+        // In this case, we show the already loaded article rather than re-fetching or redirecting.
       }
     }
-  }, [url, isSaved, isClient, user, article, fetchArticle]);
+    // Note: Session storage cleanup is intentionally omitted for now to avoid complexity with refreshes.
+    // ArticleCard is responsible for setting them before navigation.
+  }, [url, isSaved, isClient, user, fetchArticle, article]);
 
   // Update translation info when translation completes
   useEffect(() => {

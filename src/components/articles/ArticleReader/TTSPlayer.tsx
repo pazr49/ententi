@@ -123,8 +123,8 @@ export default function TTSPlayer({
       <div className="px-3 pt-3 pb-1">
         {/* Language info and metadata */}
         {currentMetadata && (
-          <div className="flex items-center mb-2 text-sm text-gray-600 dark:text-gray-300">
-            <svg className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <div className="flex flex-wrap items-center mb-2 text-sm text-gray-600 dark:text-gray-300">
+            <svg className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
             <div className="flex flex-wrap items-center">
@@ -137,7 +137,7 @@ export default function TTSPlayer({
                 <span className="ml-1">({getRegionName(currentMetadata.region)})</span>
               )}
               {currentMetadata.readingLevel && (
-                <span className="ml-2 px-1.5 py-0 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded-full text-xs">
+                <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded-full text-xs">
                   Level: {currentMetadata.readingLevel.charAt(0).toUpperCase() + currentMetadata.readingLevel.slice(1)}
                 </span>
               )}
@@ -148,7 +148,7 @@ export default function TTSPlayer({
       
       {/* Pills with separate scroll container and visible overflow */}
       <div className="relative mb-2 px-3">
-        <div className="flex space-x-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scroll-smooth">
+        <div className="flex space-x-1.5 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scroll-smooth">
           {Array.from({ length: totalParts }, (_, i) => {
             const partAudioExists = ttsAudioUrls.has(i);
             const isSelectable = !isGeneratingChunk(i);
@@ -159,7 +159,7 @@ export default function TTSPlayer({
                 onClick={() => handlePartSelection(i)}
                 disabled={!isSelectable}
                 title={!isSelectable ? `Generating Part ${i + 1}...` : `Select Part ${i + 1}`}
-                className={`flex-none px-4 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+                className={`flex-none px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                   i === selectedPartIndex
                     ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 border border-indigo-500 dark:border-indigo-600' 
                     : partAudioExists
@@ -183,52 +183,61 @@ export default function TTSPlayer({
         </div>
       </div>
         
-      {/* Voice Selection UI - Changed to Dropdown */}
-      <div className="px-3 pb-2 mb-2 border-b border-gray-200 dark:border-gray-700/50">
-        <div className="flex items-center space-x-3">
-          <label htmlFor="tts-voice-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">Voice:</label>
-          <select 
-            id="tts-voice-select"
-            name="tts-voice"
-            value={selectedVoice}
-            onChange={(e) => setSelectedVoice(e.target.value)}
-            className="block w-auto py-1 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
-          >
-            <option value="coral">Female (Coral)</option>
-            <option value="ballad">Male (Ballad)</option>
-            <option value="nova">Female (Nova)</option>
-            <option value="alloy">Male (Alloy)</option>
-            <option value="shimmer">Female (Shimmer)</option>
-            <option value="echo">Male (Echo)</option>
-            <option value="fable">Male (Fable)</option>
-            <option value="onyx">Male (Onyx)</option>
-            {/* Add other voices as needed */}
-          </select>
+      {/* Voice Selection UI - Changed to better mobile layout */}
+      <div className="px-3 pb-3 mb-2 border-b border-gray-200 dark:border-gray-700/50">
+        <div className="flex flex-wrap items-center space-x-3 space-y-2 sm:space-y-0">
+          <div className="flex items-center w-full sm:w-auto">
+            <label htmlFor="tts-voice-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16">Voice:</label>
+            <select 
+              id="tts-voice-select"
+              name="tts-voice"
+              value={selectedVoice}
+              onChange={(e) => setSelectedVoice(e.target.value)}
+              className="block flex-1 sm:w-auto py-2 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
+            >
+              <option value="coral">Female (Coral)</option>
+              <option value="ballad">Male (Ballad)</option>
+              <option value="nova">Female (Nova)</option>
+              <option value="alloy">Male (Alloy)</option>
+              <option value="shimmer">Female (Shimmer)</option>
+              <option value="echo">Male (Echo)</option>
+              <option value="fable">Male (Fable)</option>
+              <option value="onyx">Male (Onyx)</option>
+              {/* Add other voices as needed */}
+            </select>
+          </div>
 
-          <label htmlFor="tts-speed-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-4">Speed:</label>
-          <select 
-            id="tts-speed-select"
-            name="tts-speed"
-            value={selectedSpeed}
-            onChange={(e) => setSelectedSpeed(e.target.value)}
-            className="block w-auto py-1 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
-          >
-            <option value="slow">Slow</option>
-            <option value="medium">Medium</option>
-            <option value="normal">Normal</option>
-          </select>
+          <div className="flex items-center w-full sm:w-auto sm:ml-4">
+            <label htmlFor="tts-speed-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16">Speed:</label>
+            <select 
+              id="tts-speed-select"
+              name="tts-speed"
+              value={selectedSpeed}
+              onChange={(e) => setSelectedSpeed(e.target.value)}
+              className="block flex-1 sm:w-auto py-2 pl-3 pr-8 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm"
+            >
+              <option value="slow">Slow</option>
+              <option value="medium">Medium</option>
+              <option value="normal">Normal</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Audio Player or Generate Button */}
-      <div className="px-3 pb-3 min-h-[48px]">
+      <div className="px-3 pb-3 min-h-[60px]">
         {/* Always render Audio element, hide if no URL */}
         <div className={`relative ${!currentAudioUrl ? 'hidden' : ''}`}>
           <audio 
             ref={audioRef} // Assign the ref
             controls 
+            controlsList="nodownload"
             // src is set dynamically in useEffect
-            className="w-full h-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700"
+            className="w-full h-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700"
+            style={{ 
+              "--webkit-media-controls-enclosure-padding": "0",
+              "--webkit-media-controls-panel-height": "40px" 
+            } as React.CSSProperties}
           >
             Your browser does not support the audio element.
           </audio>
@@ -236,7 +245,7 @@ export default function TTSPlayer({
 
         {isLoadingThisChunk ? (
           // Loading indicator for the selected chunk
-          <div className="flex items-center justify-center py-2">
+          <div className="flex items-center justify-center py-3">
             <div className="relative w-6 h-6">
               <div className="absolute inset-0 animate-ping rounded-full bg-indigo-400 dark:bg-indigo-600 opacity-20"></div>
               <svg className="relative animate-spin h-6 w-6 text-indigo-500 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -248,11 +257,11 @@ export default function TTSPlayer({
           </div>
         ) : !currentAudioUrl ? (
           // Generate button - show only if not loading and no URL
-          <div className="flex justify-center py-1">
+          <div className="flex justify-center py-2">
             <button 
               onClick={handleGenerateChunk}
               disabled={generationDisabled}
-              className={`group relative inline-flex items-center justify-center px-4 py-1.5 rounded-lg overflow-hidden transition-all duration-300 ${
+              className={`group relative inline-flex items-center justify-center px-5 py-2.5 rounded-lg overflow-hidden transition-all duration-300 text-base ${
                 generationDisabled
                   ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
                   : 'bg-white text-indigo-600 dark:bg-gray-800 dark:text-indigo-300 hover:text-white dark:hover:text-white shadow-sm border border-indigo-200 dark:border-indigo-800/50'
@@ -273,7 +282,7 @@ export default function TTSPlayer({
 
       {/* Display TTS Error if any */} 
       {ttsError && (
-        <div className="mx-3 mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-center">
+        <div className="mx-3 mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-center">
           <p className="text-sm text-red-700 dark:text-red-300">Error: {ttsError}</p>
         </div>
       )}
